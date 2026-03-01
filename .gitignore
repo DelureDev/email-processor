@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+
+# Project runtime files
+temp/
+logs/*.log
+output/*.xlsx
+processed_ids.json
+
+# Config with credentials (keep template, ignore real config)
+# Uncomment the line below after first setup:
+# config.yaml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test data (optional — uncomment if you don't want samples in repo)
+# test_files/
