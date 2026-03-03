@@ -6,8 +6,8 @@
 imap:
   server: imap.yandex.ru
   port: 993
-  username: "spiski-bot@fantasyclinic.ru"
-  password: "REDACTED"       # Yandex app password (Settings → Security → App passwords)
+  username: "your_email@yandex.ru"
+  password: "your_app_password"       # Yandex app password (Settings → Security → App passwords)
   folder: "INBOX"
   days_back: 7                        # How many days back to scan
   # Subject keyword filter — emails must contain at least one of these in subject
@@ -23,17 +23,17 @@ imap:
 
 # --- SMTP Settings (outgoing email reports) ---
 smtp:
-  enabled: true                      # Set to true to enable email reports
+  enabled: false                      # Set to true to enable email reports
   server: smtp.yandex.ru
   port: 465
   use_ssl: true
-  username: "spiski-bot@fantasyclinic.ru"    # Usually same as IMAP
-  password: "REDACTED"       # Usually same as IMAP
-  from_address: "spiski-bot@fantasyclinic.ru"
+  username: "your_email@yandex.ru"    # Usually same as IMAP
+  password: "your_app_password"       # Usually same as IMAP
+  from_address: "your_email@yandex.ru"
   # Recipients — who gets the daily report
   recipients:
-    - "k.sikachev@fantasyclinic.ru"
-    - ""
+    - "you@example.com"
+    - "colleague@example.com"
   # Send report only if new records were found (true), or always (false)
   only_if_new_records: true
 

@@ -95,6 +95,7 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
     if should_skip_file(filename, config):
         logger.info(f"Skipped (rule): {filename}")
         stats['files_skipped'] += 1
+        stats['skipped_files'].append(filename)
         return 0
 
     # Convert .xls if needed
@@ -109,12 +110,14 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
     if fmt is None:
         logger.warning(f"Unknown format: {filename}")
         stats['files_skipped'] += 1
+        stats['unknown_files'].append(filename)
         return 0
 
     parser_fn = PARSERS.get(fmt)
     if parser_fn is None:
         logger.warning(f"No parser for format '{fmt}': {filename}")
         stats['files_skipped'] += 1
+        stats['unknown_files'].append(filename)
         return 0
 
     # Parse
@@ -128,6 +131,7 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
     if not records:
         logger.info(f"No records: {filename}")
         stats['files_skipped'] += 1
+        stats['empty_files'].append(filename)
         return 0
 
     # Deduplicate against existing master
@@ -183,6 +187,9 @@ def make_stats() -> dict:
         'duplicates_removed': 0,
         'by_company': defaultdict(int),
         'errors': [],
+        'unknown_files': [],
+        'skipped_files': [],
+        'empty_files': [],
         'master_path': '',
     }
 
@@ -327,6 +334,14 @@ def _print_summary(stats: dict):
         print(f"  By company:")
         for company, count in sorted(stats['by_company'].items(), key=lambda x: -x[1]):
             print(f"    {company}: {count}")
+    if stats.get('unknown_files'):
+        print(f"  ❓ Unknown format ({len(stats['unknown_files'])}):")
+        for f in stats['unknown_files'][:10]:
+            print(f"    {f}")
+    if stats.get('empty_files'):
+        print(f"  📭 Empty files ({len(stats['empty_files'])}):")
+        for f in stats['empty_files'][:10]:
+            print(f"    {f}")
     if stats['errors']:
         print(f"  Errors: {len(stats['errors'])}")
         for e in stats['errors'][:5]:

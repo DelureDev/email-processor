@@ -35,8 +35,10 @@ def send_report(config: dict, stats: dict):
         return
 
     if smtp_cfg.get('only_if_new_records', True) and stats.get('total_records', 0) == 0:
-        logger.info("No new records, skipping email report")
-        return
+        # Still send if there are unknown files or errors
+        if not stats.get('unknown_files') and not stats.get('errors'):
+            logger.info("No new records, skipping email report")
+            return
 
     recipients = smtp_cfg.get('recipients', [])
     if not recipients:
@@ -82,10 +84,33 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
     # Errors
     errors = stats.get('errors', [])
     if errors:
-        body += "<h3 style='color: red;'>Ошибки:</h3><ul>"
-        for err in errors[:20]:  # limit to 20
+        body += "<h3 style='color: #dc2626;'>⚠ Ошибки:</h3><ul>"
+        for err in errors[:20]:
             body += f"<li>{err}</li>"
         body += "</ul>"
+
+    # Unknown files — IMPORTANT: these need attention
+    unknown = stats.get('unknown_files', [])
+    if unknown:
+        body += "<h3 style='color: #ea580c;'>❓ Нераспознанные файлы:</h3>"
+        body += "<p style='color: #666; font-size: 13px;'>Эти файлы не подошли ни под один известный формат. Возможно, новая страховая компания или изменённый формат.</p>"
+        body += "<ul>"
+        for f in unknown[:20]:
+            body += f"<li><code>{f}</code></li>"
+        body += "</ul>"
+
+    # Empty files
+    empty = stats.get('empty_files', [])
+    if empty:
+        body += "<h3 style='color: #a3a3a3;'>📭 Файлы без записей:</h3><ul>"
+        for f in empty[:20]:
+            body += f"<li><code>{f}</code></li>"
+        body += "</ul>"
+
+    # Duplicates
+    dupes = stats.get('duplicates_removed', 0)
+    if dupes > 0:
+        body += f"<p style='color: #666; font-size: 13px;'>Дубликатов отфильтровано: {dupes}</p>"
 
     body += "<p style='color: gray; font-size: 12px;'>Мастер-файл во вложении.</p>"
     body += "</body></html>"
