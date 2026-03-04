@@ -4,7 +4,7 @@ To add a new format:
   1. Create parsers/new_format.py with a parse(filepath) function
   2. Add it to PARSERS dict below
 """
-from parsers import reso, ingos, luchi, yugoriya, zetta, alfa, sber, soglasie, vsk, absolut, psb, kaplife, euroins, renins
+from parsers import reso, ingos, luchi, energogarant, energogarant, yugoriya, zetta, alfa, sber, soglasie, vsk, absolut, psb, kaplife, euroins, renins
 
 PARSERS = {
     'reso': reso.parse,
@@ -21,4 +21,6 @@ PARSERS = {
     'renins': renins.parse,
     'ingos': ingos.parse,
     'luchi': luchi.parse,
+    'energogarant': energogarant.parse,
+    'energogarant': energogarant.parse,
 }

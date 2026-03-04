@@ -85,6 +85,18 @@ def detect_format(filepath: str) -> str | None:
             logger.info(f"Detected format: LUCHI ({filepath})")
             return 'luchi'
 
+        # --- Format O: Энергогарант style ---
+        # Markers: "энергогарант" in text
+        if 'энергогарант' in text_blob:
+            logger.info(f"Detected format: ENERGOGARANT ({filepath})")
+            return 'energogarant'
+
+        # --- Format O: Энергогарант style ---
+        # Markers: "энергогарант" in text
+        if 'энергогарант' in text_blob:
+            logger.info(f"Detected format: ENERGOGARANT ({filepath})")
+            return 'energogarant'
+
         # --- Format M: Ingosstrakh (SPISKI_LPU) style ---
         # Markers: "ингосстрах" or header with split ФИО + "полис" + "д.рожд"
         if 'ингосстрах' in text_blob:
