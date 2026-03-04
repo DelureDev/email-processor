@@ -27,3 +27,4 @@ Thumbs.db
 
 # Test data (optional — uncomment if you don't want samples in repo)
 # test_files/
+config.yaml
