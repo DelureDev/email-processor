@@ -79,6 +79,12 @@ def detect_format(filepath: str) -> str | None:
             logger.info(f"Detected format: RENINS ({filepath})")
             return 'renins'
 
+        # --- Format N: Лучи Здоровье style ---
+        # Markers: "лучи здоровье" in header area
+        if 'лучи здоровье' in text_blob:
+            logger.info(f"Detected format: LUCHI ({filepath})")
+            return 'luchi'
+
         # --- Format M: Ingosstrakh (SPISKI_LPU) style ---
         # Markers: "ингосстрах" or header with split ФИО + "полис" + "д.рожд"
         if 'ингосстрах' in text_blob:
