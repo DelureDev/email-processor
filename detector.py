@@ -79,6 +79,12 @@ def detect_format(filepath: str) -> str | None:
             logger.info(f"Detected format: RENINS ({filepath})")
             return 'renins'
 
+        # --- Format M: Ingosstrakh (SPISKI_LPU) style ---
+        # Markers: "ингосстрах" or header with split ФИО + "полис" + "д.рожд"
+        if 'ингосстрах' in text_blob:
+            logger.info(f"Detected format: INGOS ({filepath})")
+            return 'ingos'
+
         # --- Format G: VSK style ---
         # Markers: "вск" + "фио", or "контингента" (прикрепляемого/открепляемого)
         if ('вск' in text_blob and 'фио' in text_blob) or 'контингента' in text_blob:
