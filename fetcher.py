@@ -232,7 +232,7 @@ class IMAPFetcher:
                     }))
                     logger.info(f"Downloaded Zetta zip: {filename}")
 
-                elif filename.lower().endswith('.xlsx'):
+                elif filename.lower().endswith(('.xlsx', '.xls')):
                     logger.info(f"Downloaded: {filename} from '{subject}'")
                     results.append({
                         'filepath': filepath,
