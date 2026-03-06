@@ -63,6 +63,11 @@ def parse(filepath: str) -> list[dict]:
 
     if header_row is None:
         logger.error(f"ZETTA: Could not find header row in {filepath}")
+        # Debug: dump first 20 rows to help diagnose
+        for dbg_i in range(min(20, len(df))):
+            dbg_vals = [str(v) for v in df.iloc[dbg_i] if pd.notna(v)]
+            if dbg_vals:
+                logger.error(f"ZETTA DEBUG row {dbg_i}: {dbg_vals}")
         return []
 
     # Map column indices
