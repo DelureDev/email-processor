@@ -1,55 +1,96 @@
 """
 Format Detector — identifies which of the known formats an xlsx file matches.
+Two-stage detection:
+  1. Sender-based (fast, reliable) — if sender is known, skip content analysis
+  2. Content-based (fallback) — read first 25 rows and match keywords
 """
 import pandas as pd
 import logging
 
 logger = logging.getLogger(__name__)
 
+# ─── Sender → Format mapping ─────────────────────────────────────────────────
+# Maps known sender substrings (lowercase) to format names.
+# Checked first — if matched, skip content-based detection entirely.
+SENDER_FORMAT_MAP = {
+    'spiski.dms@reso.ru': 'reso',
+    'spiski@psbins.ru': 'psb',
+    'avis@alfastrah.ru': 'alfa',
+    'alfapriority@alfastrah.ru': 'alfa',
+    'zetta_life_spiski@zettains.ru': 'zetta',
+    'pulse.letter@zettains.ru': 'zetta',
+    'spiski_lpu@ingos.ru': 'ingos',
+    'list@luchi.ru': 'luchi',
+    'shahova@energogarant.ru': 'energogarant',
+    'spiski@absolutins.ru': 'absolut',
+    'spiski-dms@ugsk.ru': 'yugoriya',
+    'spiskirobot': 'vsk',
+    'spiski_lpu@soglasie.ru': 'soglasie',
+    'pultdms@soglasie.ru': 'soglasie',
+    'dobrovolnoe_ms@sberbankins.ru': 'sber',
+    'digital.assistant@sberins.ru': 'sber',
+}
 
-def detect_format(filepath: str) -> str | None:
+
+def detect_by_sender(sender: str) -> str | None:
+    """Try to detect format from sender email address."""
+    if not sender:
+        return None
+    sender_lower = sender.lower()
+    for sender_key, fmt in SENDER_FORMAT_MAP.items():
+        if sender_key in sender_lower:
+            return fmt
+    return None
+
+
+def detect_format(filepath: str, sender: str = None) -> str | None:
     """
     Detect which format the xlsx file is.
+    Args:
+        filepath: path to the xlsx/xls file
+        sender: optional sender email address (enables fast sender-based detection)
     Returns format name string or None if unknown.
     """
+    # Stage 1: Sender-based detection (fast, reliable)
+    if sender:
+        fmt = detect_by_sender(sender)
+        if fmt:
+            logger.info(f"Detected format: {fmt.upper()} (sender: {sender}) ({filepath})")
+            return fmt
+
+    # Stage 2: Content-based detection (fallback)
     try:
         xl = pd.ExcelFile(filepath)
         sheet_name = xl.sheet_names[0]
-        df = pd.read_excel(filepath, sheet_name=sheet_name, header=None, nrows=20)
+        df = pd.read_excel(filepath, sheet_name=sheet_name, header=None, nrows=25)
         text_blob = df.to_string().lower()
 
         # --- Format A: RESO-Garantiya style ---
-        # Markers: "ресо-гарантия", header row with "№\nп/п", "ФИО", "Дата рождения", "№ полиса"
         if 'ресо-гарантия' in text_blob or 'ресо' in text_blob:
             logger.info(f"Detected format: RESO ({filepath})")
             return 'reso'
 
         # --- Format B: Yugoriya style ---
-        # Markers: "югория", header with "Полис", "Фамилия", "Имя", "Отчество", "Дата рождения"
         if 'югория' in text_blob:
             logger.info(f"Detected format: YUGORIYA ({filepath})")
             return 'yugoriya'
 
         # --- Format C: Zetta style ---
-        # Markers: "зетта страхование жизни", header with "ФИО", "Номер полиса"
         if 'зетта' in text_blob and 'страхован' in text_blob:
             logger.info(f"Detected format: ZETTA ({filepath})")
             return 'zetta'
 
         # --- Format D: AlfaStrakhovanie style ---
-        # Markers: "альфастрахование", repeating blocks with "Период обслуживания"
         if 'альфастрахован' in text_blob:
             logger.info(f"Detected format: ALFA ({filepath})")
             return 'alfa'
 
         # --- Format E: Sberbank Strakhovanie style ---
-        # Markers: "сбербанк страхование" or "список застрахованных лиц" + "фамилия"/"имя"/"отчество"
         if 'сбербанк страхован' in text_blob or ('список застрахованных лиц' in text_blob and 'фамилия' in text_blob):
             logger.info(f"Detected format: SBER ({filepath})")
             return 'sber'
 
         # --- Format F: Soglasie style ---
-        # Markers: "согласие", header with "полис" + "фамилия"
         if 'согласие' in text_blob and 'фамилия' in text_blob:
             logger.info(f"Detected format: SOGLASIE ({filepath})")
             return 'soglasie'
@@ -65,7 +106,7 @@ def detect_format(filepath: str) -> str | None:
             return 'psb'
 
         # --- Format J: Kapital Life style ---
-        if 'капитал лайф' in text_blob or 'капитал' in text_blob and 'страхован' in text_blob and 'жизни' in text_blob:
+        if 'капитал лайф' in text_blob or ('капитал' in text_blob and 'страхован' in text_blob and 'жизни' in text_blob):
             logger.info(f"Detected format: KAPLIFE ({filepath})")
             return 'kaplife'
 
@@ -80,37 +121,27 @@ def detect_format(filepath: str) -> str | None:
             return 'renins'
 
         # --- Format N: Лучи Здоровье style ---
-        # Markers: "лучи здоровье" in header area
         if 'лучи здоровье' in text_blob:
             logger.info(f"Detected format: LUCHI ({filepath})")
             return 'luchi'
 
         # --- Format O: Энергогарант style ---
-        # Markers: "энергогарант" in text
-        if 'энергогарант' in text_blob:
-            logger.info(f"Detected format: ENERGOGARANT ({filepath})")
-            return 'energogarant'
-
-        # --- Format O: Энергогарант style ---
-        # Markers: "энергогарант" in text
         if 'энергогарант' in text_blob:
             logger.info(f"Detected format: ENERGOGARANT ({filepath})")
             return 'energogarant'
 
         # --- Format M: Ingosstrakh (SPISKI_LPU) style ---
-        # Markers: "ингосстрах" or header with split ФИО + "полис" + "д.рожд"
         if 'ингосстрах' in text_blob:
             logger.info(f"Detected format: INGOS ({filepath})")
             return 'ingos'
 
         # --- Format G: VSK style ---
-        # Markers: "вск" + "фио", or "контингента" (прикрепляемого/открепляемого)
         if ('вск' in text_blob and 'фио' in text_blob) or 'контингента' in text_blob:
             logger.info(f"Detected format: VSK ({filepath})")
             return 'vsk'
 
-        # --- Fallback: try to detect by column headers ---
-        for row_idx in range(min(15, len(df))):
+        # --- Fallback: generic detection by column headers ---
+        for row_idx in range(min(20, len(df))):
             row_values = [str(v).lower().strip() for v in df.iloc[row_idx] if pd.notna(v)]
             row_text = ' '.join(row_values)
 

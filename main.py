@@ -87,6 +87,7 @@ def convert_xls_to_xlsx(filepath: str) -> str | None:
 
 
 def process_file(filepath: str, master_path: str, config: dict, stats: dict,
+                 sender: str = None,
                  existing_keys: set | None = None, dry_run: bool = False) -> int:
     """Process a single file. Returns number of new records written."""
     logger = logging.getLogger(__name__)
@@ -106,7 +107,7 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
             return 0
 
     # Detect format
-    fmt = detect_format(filepath)
+    fmt = detect_format(filepath, sender=sender)
     if fmt is None:
         logger.warning(f"Unknown format: {filename}")
         stats['files_skipped'] += 1
@@ -217,6 +218,7 @@ def run_imap_mode(config: dict, dry_run: bool = False):
 
         for att in attachments:
             process_file(att['filepath'], master_path, config, stats,
+                        sender=att.get('sender', ''),
                         existing_keys=existing_keys, dry_run=dry_run)
             try:
                 os.remove(att['filepath'])
