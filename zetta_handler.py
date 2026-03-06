@@ -144,7 +144,7 @@ def unzip_with_password(zip_path: str, password: str, extract_to: str) -> list[s
     try:
         with zipfile.ZipFile(zip_path, 'r') as zf:
             for name in zf.namelist():
-                if name.lower().endswith('.xlsx'):
+                if name.lower().endswith(('.xlsx', '.xls')):
                     zf.extract(name, extract_to, pwd=password.encode('utf-8'))
                     full_path = os.path.join(extract_to, name)
                     extracted.append(full_path)
