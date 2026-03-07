@@ -3,6 +3,7 @@ Email Notifier — sends processing reports via SMTP.
 Attaches the master xlsx and includes a summary of what was processed.
 """
 import os
+import re
 import smtplib
 import logging
 from email.mime.multipart import MIMEMultipart
@@ -12,6 +13,12 @@ from email import encoders
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+
+def _is_zetta_notification(filename: str) -> bool:
+    """Check if an empty file is an expected Zetta notification (change/откреплениe letter)."""
+    # Zetta extracted files: 11140-X_ММXX-... or 11140_ММXX-...
+    return bool(re.match(r'^11140', filename))
 
 
 def send_report(config: dict, stats: dict):
@@ -58,15 +65,40 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
     msg = MIMEMultipart()
     now = datetime.now().strftime('%d.%m.%Y %H:%M')
     total = stats.get('total_records', 0)
+    errors = stats.get('errors', [])
+    unknown = stats.get('unknown_files', [])
+
+    # Determine health status
+    has_problems = bool(errors) or bool(unknown)
 
     msg['From'] = smtp_cfg['from_address']
     msg['To'] = ', '.join(smtp_cfg['recipients'])
-    msg['Subject'] = f"Обработка списков ДМС — {now} — {total} записей"
+
+    # Subject includes status emoji
+    status_emoji = "⚠" if has_problems else "✅"
+    msg['Subject'] = f"{status_emoji} Обработка списков ДМС — {now} — {total} записей"
 
     # Build HTML body
     body = f"""<html><body style="font-family: Arial, sans-serif;">
 <h2>Отчёт обработки списков ДМС</h2>
-<p><strong>Дата:</strong> {now}</p>
+"""
+
+    # ── Health status banner ──
+    if has_problems:
+        problem_count = len(errors) + len(unknown)
+        body += f"""<div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 12px 16px; margin: 16px 0; border-radius: 4px;">
+<strong style="color: #dc2626;">⚠ Обнаружено проблем: {problem_count}</strong>"""
+        if errors:
+            body += f"<br>Ошибки: {len(errors)}"
+        if unknown:
+            body += f"<br>Нераспознанные файлы: {len(unknown)}"
+        body += "</div>"
+    else:
+        body += f"""<div style="background: #f0fdf4; border-left: 4px solid #16a34a; padding: 12px 16px; margin: 16px 0; border-radius: 4px;">
+<strong style="color: #16a34a;">✅ Всё в порядке — ошибок нет</strong>
+</div>"""
+
+    body += f"""<p><strong>Дата:</strong> {now}</p>
 <p><strong>Новых записей:</strong> {total}</p>
 <p><strong>Файлов обработано:</strong> {stats.get('files_processed', 0)}</p>
 <p><strong>Файлов пропущено:</strong> {stats.get('files_skipped', 0)}</p>
@@ -82,7 +114,6 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
         body += "</table>"
 
     # Errors
-    errors = stats.get('errors', [])
     if errors:
         body += "<h3 style='color: #dc2626;'>⚠ Ошибки:</h3><ul>"
         for err in errors[:20]:
@@ -90,7 +121,6 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
         body += "</ul>"
 
     # Unknown files — IMPORTANT: these need attention
-    unknown = stats.get('unknown_files', [])
     if unknown:
         body += "<h3 style='color: #ea580c;'>❓ Нераспознанные файлы:</h3>"
         body += "<p style='color: #666; font-size: 13px;'>Эти файлы не подошли ни под один известный формат. Возможно, новая страховая компания или изменённый формат.</p>"
@@ -99,13 +129,22 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
             body += f"<li><code>{f}</code></li>"
         body += "</ul>"
 
-    # Empty files
+    # Empty files — split into Zetta notifications (expected) and real empties
     empty = stats.get('empty_files', [])
     if empty:
-        body += "<h3 style='color: #a3a3a3;'>📭 Файлы без записей:</h3><ul>"
-        for f in empty[:20]:
-            body += f"<li><code>{f}</code></li>"
-        body += "</ul>"
+        zetta_empty = [f for f in empty if _is_zetta_notification(f)]
+        other_empty = [f for f in empty if not _is_zetta_notification(f)]
+
+        if other_empty:
+            body += "<h3 style='color: #a3a3a3;'>📭 Файлы без записей:</h3><ul>"
+            for f in other_empty[:20]:
+                body += f"<li><code>{f}</code></li>"
+            body += "</ul>"
+
+        if zetta_empty:
+            body += f"""<p style='color: #a3a3a3; font-size: 13px;'>
+📋 Зетта уведомления (откреплениe/изменения, пропущено): {len(zetta_empty)} файлов
+</p>"""
 
     # Duplicates
     dupes = stats.get('duplicates_removed', 0)
