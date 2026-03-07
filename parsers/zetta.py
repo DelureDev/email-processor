@@ -57,7 +57,7 @@ def parse(filepath: str) -> list[dict]:
     for i in range(min(25, len(df))):
         row_values = [str(v).strip().lower() for v in df.iloc[i] if pd.notna(v)]
         row_text = ' '.join(row_values)
-        if 'фио' in row_text and 'полис' in row_text:
+        if ('фио' in row_text or 'фамилия имя' in row_text) and 'полис' in row_text:
             header_row = i
             break
 
@@ -83,7 +83,7 @@ def parse(filepath: str) -> list[dict]:
                 return idx
         return None
 
-    col_fio = find_col('фио')
+    col_fio = find_col('фио') or find_col('фамилия имя') or find_col('фамилия')
     col_birth = find_col('дата', 'рожд')
     col_polis = find_col('полис') or find_col('номер')
 
