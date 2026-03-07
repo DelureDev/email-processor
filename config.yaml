@@ -21,6 +21,7 @@ imap:
     - "дополнительная информация"
     - "пароль"
     - "soglasie"
+    - "капитал лайф"
 
 # --- SMTP Settings (outgoing email reports) ---
 smtp:

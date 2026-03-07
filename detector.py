@@ -29,6 +29,7 @@ SENDER_FORMAT_MAP = {
     'pultdms@soglasie.ru': 'soglasie',
     'dobrovolnoe_ms@sberbankins.ru': 'sber',
     'digital.assistant@sberins.ru': 'sber',
+    'dms@kaplife.ru': 'kaplife',
 }
 
 
