@@ -215,11 +215,15 @@ class IMAPFetcher:
                     continue
 
                 filename = decode_mime_header(filename)
-                safe_name = f"{msg_id_str}_{filename}"
+                safe_name = f"{msg_id_str}_{filename}".replace('/', '_').replace(chr(92), '_')
                 filepath = os.path.join(self.temp_folder, safe_name)
 
-                with open(filepath, 'wb') as f:
-                    f.write(part.get_payload(decode=True))
+                try:
+                    with open(filepath, 'wb') as f:
+                        f.write(part.get_payload(decode=True))
+                except OSError as e:
+                    logger.error(f"Failed to save attachment {safe_name}: {e}")
+                    continue
 
                 if filename.lower().endswith('.zip') and is_password_zip_email(sender):
                     # Password-protected zip (Zetta or Sber) — save for second pass
