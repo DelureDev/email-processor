@@ -64,6 +64,7 @@ skip_rules:
   filename_contains:
     - "_all."
     - "_all_"
+    - "Ср("
   # File extensions to ignore when found in emails
   ignore_extensions:
     - ".pdf"
