@@ -1,35 +1,33 @@
-# Fix Plan — email-processor
+# Improvement Roadmap — email-processor
 
-**STATUS: ALL PHASES COMPLETE** (deployed 2026-03-16)
+**Current score: 7.5/10** (code review 2026-03-16)
 
-41 issues fixed across 4 phases. See git history for details.
-
----
-
-## Completed phases
-
-| Phase | Items | Description |
-|-------|-------|-------------|
-| Phase 0 | 13 | Critical: Zip Slip, IMAP dedup, filename sanitization, parser bugs |
-| Phase 1 | 11 | Data integrity: date misassignment, dedup edge cases, column detection |
-| Phase 2 | 6 | Security: sender spoofing, HTML injection, TLS, attachment limits |
-| Phase 3 | 16 parsers | Refactoring: `parsers/utils.py` extracted, -678 net lines |
-| Phase 4 | 9 | Robustness: temp cleanup, processed_ids cap, config fixes, writer safety |
-
-## Post-fix improvements (deployed 2026-03-16)
-
-- Master file backup (`master.xlsx.bak`) before every write
-- Quarantine folder for files that fail parsing
-- Healthcheck ping (healthchecks.io compatible)
-- `break` → `continue` in all parser footer detection
-- `${VAR_NAME}` env var expansion in config.yaml
-- `config.yaml` removed from git tracking
+All original 41 fixes + post-fix improvements are deployed. Test suite (50 tests) is in place.
+This roadmap targets the gap from 7.5 to 9+.
 
 ---
 
-## Future work
+## Priority 1 — Reliability
 
-- **Tests** — pytest + fixture .xlsx files per insurer. Biggest remaining risk.
-- **SQLite for processed IDs** — replace `processed_ids.json` with timestamped DB for replay/audit.
-- **Master → CSV backup** — periodic human-readable export as safety net.
-- **Parser confidence scoring** — log low-confidence format detections in `detector.py`.
+| # | Item | Why |
+|---|------|-----|
+| 1 | IMAP retry logic (2-3 attempts on connect/fetch) | Network hiccups fail the entire run |
+| 2 | SQLite for processed IDs | `processed_ids.json` isn't atomic; concurrent runs or crashes can corrupt it |
+| 3 | Batch writes in writer.py | Opening/saving entire workbook per file slows down at 10k+ rows |
+| 4 | Pin dependency versions in requirements.txt | A pandas update could silently change parsing behavior |
+
+## Priority 2 — Maintainability
+
+| # | Item | Why |
+|---|------|-----|
+| 5 | Data-driven detector.py | 15-insurer if/elif chain works now but won't scale to 30+ |
+| 6 | Add type hints to fetcher.py, notifier.py, main.py | Consistency with parsers/utils.py; helps IDE and future contributors |
+| 7 | Replace `_skip_rules_cache` global with `functools.lru_cache` | Module-level `global` is an anti-pattern |
+
+## Priority 3 — Nice to have
+
+| # | Item | Why |
+|---|------|-----|
+| 8 | Parser confidence scoring in detector.py | Log low-confidence format detections for monitoring |
+| 9 | Master CSV backup (periodic export) | Human-readable safety net alongside .xlsx |
+| 10 | Audit logging of password handling | Ensure no debug mode leaks actual password values |
