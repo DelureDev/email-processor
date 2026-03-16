@@ -36,7 +36,7 @@ def parse(filepath: str) -> list[dict]:
         if not fio:
             continue
         if any(w in fio.lower() for w in ['руководител', 'директор', 'подпись', 'исп.', 'тел.']):
-            break
+            continue
 
         record = {
             'ФИО': fio,

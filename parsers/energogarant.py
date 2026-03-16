@@ -41,7 +41,7 @@ def parse(filepath: str) -> list[dict]:
         if not fio:
             continue
         if any(w in fio.lower() for w in ['итого', 'всего', 'с уважением', 'директор', 'начальник']):
-            break
+            continue
 
         # Strahovatel from row (reset each row)
         strahovatel = get_cell_str(df, i, col_work)

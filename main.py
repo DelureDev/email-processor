@@ -10,6 +10,7 @@ Usage:
     python main.py --dry-run           # IMAP mode but don't write to master
 """
 import os
+import re
 import sys
 import shutil
 import yaml
@@ -41,9 +42,20 @@ def setup_logging(config: dict):
     )
 
 
+def _expand_env(obj):
+    """Recursively expand ${VAR_NAME} placeholders in config values."""
+    if isinstance(obj, str):
+        return re.sub(r'\$\{(\w+)\}', lambda m: os.environ.get(m.group(1), m.group(0)), obj)
+    if isinstance(obj, dict):
+        return {k: _expand_env(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_expand_env(i) for i in obj]
+    return obj
+
+
 def load_config(path: str = 'config.yaml') -> dict:
     with open(path, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f)
+        return _expand_env(yaml.safe_load(f))
 
 
 def _build_skip_rules(config: dict) -> tuple[list[str], list[str]]:

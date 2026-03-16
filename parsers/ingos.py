@@ -61,7 +61,7 @@ def parse(filepath: str) -> list[dict]:
         if not familia:
             continue
         if any(w in familia.lower() for w in ['итого', 'всего', 'клиентов', 'страница']):
-            break
+            continue
 
         fio = assemble_fio(df, i, col_familia, col_imya, col_otch).upper()
 

@@ -7,7 +7,7 @@ imap:
   server: imap.yandex.ru
   port: 993
   username: "spiski-bot@fantasyclinic.ru"
-  password: "***REMOVED***"       # Yandex app password (Settings → Security → App passwords)
+  password: "***REMOVED***"       # or use ${IMAP_PASSWORD} to read from environment variable
   folder: "INBOX"
   days_back: 3                        # How many days back to scan
   # Subject keyword filter — emails must contain at least one of these in subject

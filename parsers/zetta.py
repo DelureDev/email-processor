@@ -79,7 +79,7 @@ def parse(filepath: str) -> list[dict]:
         fio = fio.upper()
 
         if any(w in fio.lower() for w in ['итого', 'всего', 'клиентов', 'программа']):
-            break
+            continue
 
         record = {
             'ФИО': fio,

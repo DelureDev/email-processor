@@ -49,7 +49,7 @@ def parse(filepath: str) -> list[dict]:
             if not fio:
                 continue
             if any(w in fio.lower() for w in ['контакт-центр', 'руководител', 'исполнител']):
-                break
+                continue
             record = {
                 'ФИО': fio,
                 'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
@@ -76,7 +76,7 @@ def parse(filepath: str) -> list[dict]:
             if not familia:
                 continue
             if any(w in familia.lower() for w in ['контакт-центр', 'руководител', 'исполнител', 'медицинский']):
-                break
+                continue
 
             fio = assemble_fio(df, i, col_familia, col_imya, col_otchestvo)
 

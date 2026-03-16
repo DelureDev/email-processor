@@ -101,7 +101,7 @@ def parse(filepath: str) -> list[dict]:
             if not familia:
                 continue
             if any(w in familia.lower() for w in ['итого', 'всего', 'генеральный', 'директор', 'страница']):
-                break
+                continue
             fio = assemble_fio(df, i, col_familia, col_imya, col_otch).upper()
         else:
             fio = get_cell_str(df, i, col_fio)
@@ -109,7 +109,7 @@ def parse(filepath: str) -> list[dict]:
                 continue
             fio = fio.upper()
             if any(w in fio.lower() for w in ['итого', 'всего', 'клиентов', 'программа']):
-                break
+                continue
 
         row_start = format_date(df.iloc[i, col_start]) if col_start is not None else start_date
         row_end = format_date(df.iloc[i, col_end]) if col_end is not None else end_date
