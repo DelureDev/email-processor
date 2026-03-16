@@ -5,6 +5,7 @@ import imaplib
 import email
 from email.header import decode_header
 import os
+import re
 import json
 import logging
 from datetime import datetime, timedelta
@@ -134,9 +135,6 @@ class IMAPFetcher:
         for msg_id in msg_ids:
             msg_id_str = msg_id.decode()
 
-            if msg_id_str in self.processed_ids:
-                continue
-
             status, msg_data = self.mail.fetch(msg_id, '(RFC822)')
             if status != 'OK':
                 continue
@@ -215,7 +213,7 @@ class IMAPFetcher:
                     continue
 
                 filename = decode_mime_header(filename)
-                safe_name = f"{msg_id_str}_{filename}".replace('/', '_').replace(chr(92), '_')
+                safe_name = f"{msg_id_str}_{re.sub(r'[\\/:*?\"<>|]', '_', os.path.basename(filename))}"
                 filepath = os.path.join(self.temp_folder, safe_name)
 
                 try:
@@ -247,9 +245,8 @@ class IMAPFetcher:
                         'message_id': message_id,
                     })
 
-            # Mark as processed
+            # Mark as processed (Message-ID only — IMAP sequence numbers are not stable)
             self.processed_ids.add(message_id)
-            self.processed_ids.add(msg_id_str)
 
         # Second pass: extract Zetta zips using collected passwords
         if zetta_zips and zetta_passwords:

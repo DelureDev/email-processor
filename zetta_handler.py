@@ -145,8 +145,18 @@ def unzip_with_password(zip_path: str, password: str, extract_to: str) -> list[s
         with zipfile.ZipFile(zip_path, 'r') as zf:
             for name in zf.namelist():
                 if name.lower().endswith(('.xlsx', '.xls')):
-                    zf.extract(name, extract_to, pwd=password.encode('utf-8'))
-                    full_path = os.path.join(extract_to, name)
+                    # Zip Slip guard
+                    full_path = os.path.realpath(os.path.join(extract_to, name))
+                    if not full_path.startswith(os.path.realpath(extract_to) + os.sep):
+                        logger.error(f"Zip Slip blocked: {name}")
+                        continue
+                    # Try cp866 first (7-Zip default for Cyrillic), fall back to utf-8
+                    for encoding in ('cp866', 'utf-8'):
+                        try:
+                            zf.extract(name, extract_to, pwd=password.encode(encoding))
+                            break
+                        except RuntimeError:
+                            continue
                     extracted.append(full_path)
                     logger.info(f"Extracted: {name}")
 

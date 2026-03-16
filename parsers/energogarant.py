@@ -84,7 +84,8 @@ def parse(filepath: str) -> list[dict]:
         if col_polis is not None and pd.notna(df.iloc[i, col_polis]):
             polis = str(df.iloc[i, col_polis]).strip()
 
-        # Strahovatel from row
+        # Strahovatel from row (reset each row — don't leak across records)
+        strahovatel = None
         if col_work is not None and pd.notna(df.iloc[i, col_work]):
             strahovatel = str(df.iloc[i, col_work]).strip()
 

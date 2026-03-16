@@ -82,8 +82,8 @@ def convert_xls_to_xlsx(filepath: str) -> str | None:
     except Exception as e:
         logger.error(f"Failed to convert {filepath}: {e}")
 
-    # Fallback: try reading directly with xlrd (if installed)
-    return filepath
+    # Fallback: could not convert
+    return None
 
 
 def process_file(filepath: str, master_path: str, config: dict, stats: dict,

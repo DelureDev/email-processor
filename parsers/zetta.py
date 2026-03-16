@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 def parse(filepath: str) -> list[dict]:
     """Parse Zetta format xlsx and return list of normalized records."""
-    df = pd.read_excel(filepath, sheet_name=0, header=None, nrows=100)
+    df = pd.read_excel(filepath, sheet_name=0, header=None)
     results = []
 
     # Extract metadata from upper rows

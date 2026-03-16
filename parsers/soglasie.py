@@ -36,7 +36,7 @@ def parse(filepath: str) -> list[dict]:
             if 'прикрепление' in val_str.lower() or 'открепление' in val_str.lower():
                 # Start date might be in same cell or next column
                 dates = re.findall(r'\d{2}\.\d{2}\.\d{4}', val_str)
-                if dates:
+                if dates and start_date is None:
                     start_date = dates[0]
                 # Check next columns for dates
                 for k in range(j + 1, min(j + 4, len(df.columns))):
