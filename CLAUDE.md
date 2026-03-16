@@ -38,7 +38,7 @@ Production VM: `adminos@n8n:~/email-processor`. Deploy via `git push` then `git 
 **Pipeline flow (IMAP mode):**
 `fetcher.py` → `detector.py` → `parsers/` → `writer.py` → `notifier.py`
 
-1. **`fetcher.py` (`IMAPFetcher`)** — connects to Yandex IMAP, filters emails by subject keywords, downloads `.xlsx`/`.xls`/`.zip` attachments to `./temp/`. Tracks processed message IDs (RFC 2822 `Message-ID` only) in `processed_ids.json` to avoid reprocessing. Two-pass logic: first collects all passwords from Zetta/Sber password emails, then extracts password-protected zips in a second pass.
+1. **`fetcher.py` (`IMAPFetcher`)** — connects to Yandex IMAP, filters emails by subject keywords, downloads `.xlsx`/`.xls`/`.zip` attachments to `./temp/`. Tracks processed message IDs (RFC 2822 `Message-ID` only) in `processed_ids.json` (capped at 5000 entries) to avoid reprocessing. Two-pass logic: first collects all passwords from Zetta/Sber password emails, then extracts password-protected zips in a second pass.
 
 2. **`zetta_handler.py`** — all logic for password-protected ZIPs (Zetta Insurance and Sberbank). Handles two Zetta password flows: monthly passwords from `parollpu@zettains.ru` and per-email passwords from `pulse.letter@zettains.ru`. `try_passwords()` tries cp866 then utf-8 encoding for each password. Zip Slip guard validates extracted paths stay inside extraction directory.
 
@@ -65,10 +65,16 @@ Production VM: `adminos@n8n:~/email-processor`. Deploy via `git push` then `git 
 
 `config.yaml` holds IMAP/SMTP credentials, output path, skip rules, and dedup settings. **Never commit credentials** — load from env vars or keep `config.yaml` in `.gitignore`. The `skip_rules.filename_contains` list skips files whose names contain specific substrings (e.g. `_all.` for aggregate files). `processed_ids.json` persists processed message IDs across runs.
 
-## Known issues & technical debt
+## Shared parser utilities
 
-Tracked in `PLAN.md`. Key areas:
-- **Parser duplication**: `_format_date()`, `find_col()`, header-scan loop, FIO assembly all duplicated across 15 parsers — extract to `parsers/utils.py`
-- **Three copies of `convert_xls_to_xlsx`** in `main.py`, `kaplife.py`, `renins.py` — consolidate
-- **`alfa.py` uses hardcoded column indices** unlike all other parsers — fragile if layout changes
-- **`writer.py:_append_to_existing`** uses `ws.max_row` which can include empty styled rows from openpyxl
+All parsers import from `parsers/utils.py`:
+- `format_date(val)` — normalize any date to `DD.MM.YYYY`
+- `find_header_row(df, keywords, max_rows)` — scan for header row by keyword tuple
+- `build_header_map(df, header_row)` — build `{lowered_header: col_idx}` dict
+- `find_col(headers, *keywords)` — find column index by keyword match
+- `assemble_fio(df, row, col_f, col_i, col_o)` — combine split FIO columns
+- `get_cell_str(df, row, col)` — safe cell-to-string with None handling
+
+## Fix history
+
+All issues tracked in `PLAN.md` (41 items across 4 phases) are resolved as of 2026-03-16.
