@@ -24,7 +24,7 @@ from collections import defaultdict
 
 from detector import detect_format
 from parsers import PARSERS
-from writer import write_to_master, load_existing_keys
+from writer import write_to_master, write_batch_to_master, load_existing_keys
 
 
 def setup_logging(config: dict):
@@ -134,7 +134,8 @@ def _quarantine(filepath: str, config: dict):
 
 def process_file(filepath: str, master_path: str, config: dict, stats: dict,
                  sender: str = None,
-                 existing_keys: set | None = None, dry_run: bool = False) -> int:
+                 existing_keys: set | None = None, dry_run: bool = False,
+                 pending: list | None = None) -> int:
     """Process a single file. Returns number of new records written."""
     logger = logging.getLogger(__name__)
     filename = os.path.basename(filepath)
@@ -201,10 +202,13 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
         company = r.get('Страховая компания', 'Неизвестно')
         stats['by_company'][company] += 1
 
-    # Write
+    # Write (or queue for batch write)
     if not dry_run:
-        write_to_master(records, master_path, source_filename=filename)
-        # Update existing keys with new records
+        if pending is not None:
+            pending.append((records, filename))
+        else:
+            write_to_master(records, master_path, source_filename=filename)
+        # Update existing keys so subsequent files in same run deduplicate correctly
         if existing_keys is not None:
             for r in records:
                 existing_keys.add(_record_key(r))
@@ -282,6 +286,7 @@ def run_imap_mode(config: dict, dry_run: bool = False):
         logger.info(f"Loaded {len(existing_keys)} existing records for dedup")
 
     fetcher = IMAPFetcher(config, dry_run=dry_run)
+    pending = []
     try:
         fetcher.connect()
         days_back = config.get('imap', {}).get('days_back', 7)
@@ -290,7 +295,8 @@ def run_imap_mode(config: dict, dry_run: bool = False):
         for att in attachments:
             process_file(att['filepath'], master_path, config, stats,
                         sender=att.get('sender', ''),
-                        existing_keys=existing_keys, dry_run=dry_run)
+                        existing_keys=existing_keys, dry_run=dry_run,
+                        pending=pending)
             try:
                 os.remove(att['filepath'])
             except OSError:
@@ -313,6 +319,9 @@ def run_imap_mode(config: dict, dry_run: bool = False):
         stats['errors'].append(f"IMAP error: {e}")
     finally:
         fetcher.disconnect()
+
+    if pending and not dry_run:
+        write_batch_to_master(pending, master_path)
 
     _print_summary(stats)
 
@@ -344,9 +353,14 @@ def run_local_mode(folder: str, config: dict, dry_run: bool = False):
     )
     logger.info(f"Found {len(files)} files in {folder}")
 
+    pending = []
     for filepath in sorted(files):
         process_file(filepath, master_path, config, stats,
-                    existing_keys=existing_keys, dry_run=dry_run)
+                    existing_keys=existing_keys, dry_run=dry_run,
+                    pending=pending)
+
+    if pending and not dry_run:
+        write_batch_to_master(pending, master_path)
 
     _print_summary(stats)
 

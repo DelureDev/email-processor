@@ -63,23 +63,38 @@ COLUMN_WIDTHS = {
 
 def write_to_master(records: list[dict], master_path: str, source_filename: str = ""):
     """Append records to master xlsx file. Creates file if it doesn't exist."""
+    write_batch_to_master([(records, source_filename)], master_path)
+
+
+def write_batch_to_master(batch: list[tuple[list[dict], str]], master_path: str):
+    """
+    Write multiple batches of records in a single open/save cycle.
+    batch: list of (records, source_filename) tuples.
+    Opens the workbook once regardless of how many files are in the batch.
+    """
+    if not batch:
+        return
+
     os.makedirs(os.path.dirname(master_path) or '.', exist_ok=True)
 
     now = datetime.now().strftime('%d.%m.%Y %H:%M')
-    records = [{**r, 'Источник файла': source_filename, 'Дата обработки': now} for r in records]
+    all_records = [
+        {**r, 'Источник файла': source_filename, 'Дата обработки': now}
+        for records, source_filename in batch
+        for r in records
+    ]
 
     if os.path.exists(master_path):
-        # Backup before every write — if openpyxl corrupts the file on crash, .bak is safe
         bak_path = master_path + '.bak'
         try:
             shutil.copy2(master_path, bak_path)
         except OSError as e:
             logger.warning(f"Could not create backup of master: {e}")
-        _append_to_existing(records, master_path)
+        _append_to_existing(all_records, master_path)
     else:
-        _create_new(records, master_path)
+        _create_new(all_records, master_path)
 
-    logger.info(f"Wrote {len(records)} records to {master_path}")
+    logger.info(f"Wrote {len(all_records)} records ({len(batch)} files) to {master_path}")
 
 
 def _create_new(records: list[dict], path: str):
