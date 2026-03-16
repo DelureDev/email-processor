@@ -5,6 +5,7 @@ import imaplib
 import email
 import email.utils
 import ssl
+import time
 from email.header import decode_header
 import os
 import re
@@ -93,13 +94,23 @@ class IMAPFetcher:
         with open(self.processed_file, 'w') as f:
             json.dump(ids_list, f, indent=2)
 
-    def connect(self):
-        """Connect to Yandex IMAP."""
+    def connect(self, retries: int = 3, delay: float = 5.0):
+        """Connect to Yandex IMAP. Retries up to `retries` times on failure."""
         logger.info(f"Connecting to {self.server}:{self.port}...")
-        self.mail = imaplib.IMAP4_SSL(self.server, self.port, ssl_context=ssl.create_default_context())
-        self.mail.login(self.username, self.password)
-        self.mail.select(self.folder)
-        logger.info("Connected successfully")
+        last_exc = None
+        for attempt in range(1, retries + 1):
+            try:
+                self.mail = imaplib.IMAP4_SSL(self.server, self.port, ssl_context=ssl.create_default_context())
+                self.mail.login(self.username, self.password)
+                self.mail.select(self.folder)
+                logger.info("Connected successfully")
+                return
+            except Exception as e:
+                last_exc = e
+                if attempt < retries:
+                    logger.warning(f"Connection attempt {attempt} failed: {e} — retrying in {delay}s")
+                    time.sleep(delay)
+        raise ConnectionError(f"Failed to connect after {retries} attempts: {last_exc}")
 
     def disconnect(self):
         try:
@@ -142,8 +153,14 @@ class IMAPFetcher:
         if status == 'OK' and pwd_msgs[0]:
             for msg_id in pwd_msgs[0].split():
                 try:
-                    st, msg_data = self.mail.fetch(msg_id, '(RFC822)')
-                    if st != 'OK':
+                    msg_data = None
+                    for attempt in range(1, 4):
+                        st, data = self.mail.fetch(msg_id, '(RFC822)')
+                        if st == 'OK':
+                            msg_data = data
+                            break
+                        time.sleep(2)
+                    if msg_data is None:
                         continue
                     msg = email.message_from_bytes(msg_data[0][1])
                     monthly = _extract_monthly_pwd_from_msg(msg)
@@ -168,8 +185,16 @@ class IMAPFetcher:
         for msg_id in msg_ids:
             msg_id_str = msg_id.decode()
 
-            status, msg_data = self.mail.fetch(msg_id, '(RFC822)')
-            if status != 'OK':
+            msg_data = None
+            for attempt in range(1, 4):
+                status, data = self.mail.fetch(msg_id, '(RFC822)')
+                if status == 'OK':
+                    msg_data = data
+                    break
+                logger.warning(f"Fetch attempt {attempt} failed for msg {msg_id_str}, retrying...")
+                time.sleep(2)
+            if msg_data is None:
+                logger.error(f"Skipping message {msg_id_str} after 3 failed fetch attempts")
                 continue
 
             msg = email.message_from_bytes(msg_data[0][1])
