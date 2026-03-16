@@ -43,8 +43,16 @@ smtp:
 processing:
   temp_folder: "./temp"
   processed_ids_file: "./processed_ids.json"
+  # Files that fail parsing are copied here for manual inspection
+  quarantine_folder: "./quarantine"
   # Deduplication: skip records matching ФИО + № полиса + Начало + Конец already in master
   deduplicate: true
+
+# --- Healthcheck (https://healthchecks.io — free tier) ---
+# Paste your ping URL here. Leave empty to disable.
+# The cron should alert you if this URL isn't hit for >24h.
+# Append /fail automatically on errors, so you see red vs green.
+healthcheck_url: ""   # e.g. https://hc-ping.com/your-uuid-here
 
 # --- Output ---
 output:

@@ -2,6 +2,7 @@
 Writer — appends normalized records to master xlsx file on network drive.
 """
 import os
+import shutil
 import pandas as pd
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -68,6 +69,12 @@ def write_to_master(records: list[dict], master_path: str, source_filename: str 
     records = [{**r, 'Источник файла': source_filename, 'Дата обработки': now} for r in records]
 
     if os.path.exists(master_path):
+        # Backup before every write — if openpyxl corrupts the file on crash, .bak is safe
+        bak_path = master_path + '.bak'
+        try:
+            shutil.copy2(master_path, bak_path)
+        except OSError as e:
+            logger.warning(f"Could not create backup of master: {e}")
         _append_to_existing(records, master_path)
     else:
         _create_new(records, master_path)

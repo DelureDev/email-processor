@@ -11,11 +11,13 @@ Usage:
 """
 import os
 import sys
+import shutil
 import yaml
 import glob
 import logging
 import argparse
 import subprocess
+import urllib.request
 from datetime import datetime
 from collections import defaultdict
 
@@ -101,6 +103,19 @@ def _dedup_xls_xlsx(files: list[str]) -> list[str]:
     return list(by_stem.values())
 
 
+def _quarantine(filepath: str, config: dict):
+    """Copy a problematic file to the quarantine folder for manual inspection."""
+    logger = logging.getLogger(__name__)
+    quarantine_dir = config.get('processing', {}).get('quarantine_folder', './quarantine')
+    try:
+        os.makedirs(quarantine_dir, exist_ok=True)
+        dest = os.path.join(quarantine_dir, os.path.basename(filepath))
+        shutil.copy2(filepath, dest)
+        logger.warning(f"Quarantined: {os.path.basename(filepath)} → {quarantine_dir}")
+    except OSError as e:
+        logger.error(f"Failed to quarantine {filepath}: {e}")
+
+
 def process_file(filepath: str, master_path: str, config: dict, stats: dict,
                  sender: str = None,
                  existing_keys: set | None = None, dry_run: bool = False) -> int:
@@ -142,6 +157,7 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
     except Exception as e:
         logger.error(f"Parse error in {filename}: {e}", exc_info=True)
         stats['errors'].append(f"Parse error: {filename} ({e})")
+        _quarantine(filepath, config)
         return 0
 
     if not records:
@@ -210,6 +226,30 @@ def make_stats() -> dict:
     }
 
 
+def _ping_healthcheck(config: dict, stats: dict):
+    """Ping healthchecks.io (or compatible) URL to confirm cron is alive."""
+    url = config.get('healthcheck_url', '').strip()
+    if not url:
+        return
+    logger = logging.getLogger(__name__)
+    body = (
+        f"records={stats['total_records']} "
+        f"files={stats['files_processed']} "
+        f"errors={len(stats['errors'])}"
+    ).encode()
+    # Append /fail if there were errors so healthchecks.io marks it red
+    if stats['errors']:
+        url = url.rstrip('/') + '/fail'
+    try:
+        urllib.request.urlopen(
+            urllib.request.Request(url, data=body, method='POST'),
+            timeout=10,
+        )
+        logger.debug(f"Healthcheck pinged: {url}")
+    except Exception as e:
+        logger.warning(f"Healthcheck ping failed: {e}")
+
+
 def run_imap_mode(config: dict, dry_run: bool = False):
     """Full pipeline: fetch from IMAP → detect → parse → write → notify."""
     logger = logging.getLogger(__name__)
@@ -248,7 +288,6 @@ def run_imap_mode(config: dict, dry_run: bool = False):
             # Clean up Zetta extract dir
             extract_dir = att.get('_extract_dir')
             if extract_dir:
-                import shutil
                 try:
                     shutil.rmtree(extract_dir, ignore_errors=True)
                 except OSError:
@@ -265,6 +304,9 @@ def run_imap_mode(config: dict, dry_run: bool = False):
     if not dry_run:
         from notifier import send_report
         send_report(config, stats)
+
+    # Healthcheck ping — always fires so we know if cron stopped running
+    _ping_healthcheck(config, stats)
 
     return stats
 
