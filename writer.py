@@ -20,18 +20,18 @@ def load_existing_keys(master_path: str) -> set:
     if not os.path.exists(master_path):
         return keys
     try:
-        df = pd.read_excel(master_path)
-        for _, row in df.iterrows():
-            def clean(val):
-                s = str(val).strip() if val is not None else ''
-                return '' if s == 'nan' or s == 'None' or s == 'NaT' else s
-            key = (
-                clean(row.get('ФИО', '')).upper(),
-                clean(row.get('№ полиса', '')),
-                clean(row.get('Начало обслуживания', '')),
-                clean(row.get('Конец обслуживания', '')),
-            )
-            keys.add(key)
+        dedup_cols = ['ФИО', '№ полиса', 'Начало обслуживания', 'Конец обслуживания']
+        df = pd.read_excel(master_path, usecols=dedup_cols)
+
+        def _clean(s):
+            s = str(s).strip()
+            return '' if s in ('nan', 'None', 'NaT') else s
+
+        for col in dedup_cols:
+            df[col] = df[col].map(_clean)
+        df['ФИО'] = df['ФИО'].str.upper()
+
+        keys = set(zip(df['ФИО'], df['№ полиса'], df['Начало обслуживания'], df['Конец обслуживания']))
     except Exception as e:
         logger.error(f"Error loading existing keys: {e}")
     return keys
@@ -40,6 +40,7 @@ HEADER_FONT = Font(name='Arial', bold=True, size=11, color='FFFFFF')
 HEADER_FILL = PatternFill('solid', fgColor='2F5496')
 HEADER_ALIGNMENT = Alignment(horizontal='center', vertical='center', wrap_text=True)
 DATA_FONT = Font(name='Arial', size=10)
+DATA_ALIGNMENT = Alignment(vertical='center')
 THIN_BORDER = Border(
     left=Side(style='thin', color='D9D9D9'),
     right=Side(style='thin', color='D9D9D9'),
@@ -99,7 +100,7 @@ def _create_new(records: list[dict], path: str):
             cell = ws.cell(row=row_idx, column=col_idx, value=record.get(col_name, ''))
             cell.font = DATA_FONT
             cell.border = THIN_BORDER
-            cell.alignment = Alignment(vertical='center')
+            cell.alignment = DATA_ALIGNMENT
 
     # Freeze header
     ws.freeze_panes = 'A2'
@@ -118,7 +119,7 @@ def _append_to_existing(records: list[dict], path: str):
             cell = ws.cell(row=row_idx, column=col_idx, value=record.get(col_name, ''))
             cell.font = DATA_FONT
             cell.border = THIN_BORDER
-            cell.alignment = Alignment(vertical='center')
+            cell.alignment = DATA_ALIGNMENT
 
     # Update autofilter range
     ws.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNS))}{ws.max_row}"

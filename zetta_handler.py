@@ -87,7 +87,7 @@ def extract_monthly_password(body: str) -> dict | None:
             continue
         if found_period and len(line) >= 4 and not line.startswith('Коммерческ') and not line.startswith('Настоящ'):
             password = line.strip()
-            logger.info(f"Found Zetta monthly password: {password[:3]}*** (valid {valid_from} - {valid_to})")
+            logger.info(f"Found Zetta monthly password: {len(password)} chars (valid {valid_from} - {valid_to})")
             return {
                 'password': password,
                 'valid_from': valid_from,
@@ -107,7 +107,7 @@ def extract_password_from_body(body: str) -> str | None:
     if match:
         password = match.group(1).strip()
         if len(password) >= 4:
-            logger.info(f"Found password (zip pattern): {password[:3]}***")
+            logger.info(f"Found password (zip pattern): {len(password)} chars")
             return password
 
     # Pattern 2: "Пароль:XXXX" or "Пароль: XXXX" (Sber style)
@@ -115,7 +115,7 @@ def extract_password_from_body(body: str) -> str | None:
     if match:
         password = match.group(1).strip()
         if len(password) >= 3 and 'поступит' not in password.lower() and 'от' not in password.lower():
-            logger.info(f"Found password (direct pattern): {password[:3]}***")
+            logger.info(f"Found password (direct pattern): {len(password)} chars")
             return password
 
     return None

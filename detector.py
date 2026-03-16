@@ -61,10 +61,9 @@ def detect_format(filepath: str, sender: str = None) -> str | None:
 
     # Stage 2: Content-based detection (fallback)
     try:
-        xl = pd.ExcelFile(filepath)
-        sheet_name = xl.sheet_names[0]
-        df = pd.read_excel(filepath, sheet_name=sheet_name, header=None, nrows=25)
-        text_blob = df.to_string().lower()
+        with pd.ExcelFile(filepath) as xl:
+            df = xl.parse(sheet_name=xl.sheet_names[0], header=None, nrows=25)
+        text_blob = ' '.join(str(v) for v in df.values.flat if pd.notna(v)).lower()
 
         # --- Format A: RESO-Garantiya style ---
         if 'ресо-гарантия' in text_blob or 'ресо' in text_blob:
