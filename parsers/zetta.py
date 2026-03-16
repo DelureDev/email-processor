@@ -5,8 +5,10 @@ Structure: header row at ~row 16 with columns:
 Metadata in rows above: Организация (~row 10), Договор № (~row 11), Срок действия (~row 12)
 """
 import pandas as pd
+import re
 import logging
-from datetime import datetime
+
+from parsers.utils import format_date, find_header_row, build_header_map, find_col, get_cell_str
 
 logger = logging.getLogger(__name__)
 
@@ -30,21 +32,18 @@ def parse(filepath: str) -> list[dict]:
 
             # Organization name (Страхователь)
             if 'организация' in val_str.lower() and ':' in val_str:
-                # The org name might be in the next column
                 for k in range(j + 1, len(df.columns)):
                     next_val = df.iloc[i, k]
                     if pd.notna(next_val) and str(next_val).strip():
                         strahovatel = str(next_val).strip()
                         break
 
-            # Срок действия (validity period) -> used for Открепление (end date)
+            # Срок действия (validity period)
             if 'срок действия' in val_str.lower():
                 for k in range(j + 1, len(df.columns)):
                     next_val = df.iloc[i, k]
                     if pd.notna(next_val):
                         period = str(next_val).strip()
-                        # Parse "с 27.02.2026 по 08.08.2026"
-                        import re
                         dates = re.findall(r'\d{2}\.\d{2}\.\d{4}', period)
                         if len(dates) >= 1:
                             srok_start = dates[0]
@@ -52,62 +51,40 @@ def parse(filepath: str) -> list[dict]:
                             srok_end = dates[1]
                         break
 
-    # Find header row (contains "ФИО" and "полис")
-    header_row = None
-    for i in range(min(25, len(df))):
-        row_values = [str(v).strip().lower() for v in df.iloc[i] if pd.notna(v)]
-        row_text = ' '.join(row_values)
-        if ('фио' in row_text or 'фамилия имя' in row_text) and 'полис' in row_text:
-            header_row = i
-            break
-
+    # Find header row
+    header_row = find_header_row(df, ('фио', 'полис'), max_rows=25)
+    if header_row is None:
+        header_row = find_header_row(df, ('фамилия имя', 'полис'), max_rows=25)
     if header_row is None:
         logger.error(f"ZETTA: Could not find header row in {filepath}")
-        # Debug: dump first 20 rows to help diagnose
         for dbg_i in range(min(20, len(df))):
             dbg_vals = [str(v) for v in df.iloc[dbg_i] if pd.notna(v)]
             if dbg_vals:
                 logger.error(f"ZETTA DEBUG row {dbg_i}: {dbg_vals}")
         return []
 
-    # Map column indices
-    headers = {}
-    for col_idx in range(len(df.columns)):
-        val = df.iloc[header_row, col_idx]
-        if pd.notna(val):
-            headers[str(val).strip().lower().replace('\n', ' ')] = col_idx
+    headers = build_header_map(df, header_row)
+    col_fio = find_col(headers, 'фио') or find_col(headers, 'фамилия имя') or find_col(headers, 'фамилия')
+    col_birth = find_col(headers, 'дата', 'рожд')
+    col_polis = find_col(headers, 'полис') or find_col(headers, 'номер')
 
-    def find_col(*keywords):
-        for key, idx in headers.items():
-            if all(kw in key for kw in keywords):
-                return idx
-        return None
-
-    col_fio = find_col('фио') or find_col('фамилия имя') or find_col('фамилия')
-    col_birth = find_col('дата', 'рожд')
-    col_polis = find_col('полис') or find_col('номер')
-
-    # Parse data rows
     for i in range(header_row + 1, len(df)):
-        fio = df.iloc[i, col_fio] if col_fio is not None else None
-
-        if pd.isna(fio) or str(fio).strip() == '':
-            # Check if we hit the footer (e.g. "Клиентов :")
-            first_val = df.iloc[i, 0] if pd.notna(df.iloc[i, 0]) else ''
-            if 'клиентов' in str(first_val).lower():
+        fio = get_cell_str(df, i, col_fio)
+        if not fio:
+            first_val = get_cell_str(df, i, 0)
+            if first_val and 'клиентов' in first_val.lower():
                 break
             continue
 
-        fio = str(fio).strip().upper()
+        fio = fio.upper()
 
-        # Skip non-name rows
         if any(w in fio.lower() for w in ['итого', 'всего', 'клиентов', 'программа']):
             break
 
         record = {
             'ФИО': fio,
-            'Дата рождения': _format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
-            '№ полиса': str(df.iloc[i, col_polis]).strip() if col_polis is not None and pd.notna(df.iloc[i, col_polis]) else None,
+            'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
+            '№ полиса': get_cell_str(df, i, col_polis),
             'Начало обслуживания': srok_start,
             'Конец обслуживания': srok_end,
             'Страховая компания': 'Зетта Страхование жизни',
@@ -117,17 +94,3 @@ def parse(filepath: str) -> list[dict]:
 
     logger.info(f"ZETTA: parsed {len(results)} records from {filepath}")
     return results
-
-
-def _format_date(val) -> str | None:
-    if pd.isna(val):
-        return None
-    if isinstance(val, datetime):
-        return val.strftime('%d.%m.%Y')
-    s = str(val).strip()
-    for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%d.%m.%Y', '%d/%m/%Y']:
-        try:
-            return datetime.strptime(s, fmt).strftime('%d.%m.%Y')
-        except ValueError:
-            continue
-    return s

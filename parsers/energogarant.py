@@ -8,8 +8,8 @@ Structure (letter-style):
 """
 import pandas as pd
 import logging
-import re
-from datetime import datetime
+
+from parsers.utils import format_date, find_header_row, build_header_map, find_col, get_cell_str
 
 logger = logging.getLogger(__name__)
 
@@ -19,82 +19,39 @@ def parse(filepath: str) -> list[dict]:
     df = pd.read_excel(filepath, sheet_name=0, header=None, dtype=str)
     results = []
 
-    # Find header row (contains "ФИО" and "Полис")
-    header_row = None
-    for i in range(min(25, len(df))):
-        row_values = [str(v).strip().lower() for v in df.iloc[i] if pd.notna(v)]
-        row_text = ' '.join(row_values)
-        if 'фио' in row_text and 'полис' in row_text:
-            header_row = i
-            break
-
+    header_row = find_header_row(df, ('фио', 'полис'), max_rows=25)
     if header_row is None:
         logger.error(f"ENERGOGARANT: Could not find header row in {filepath}")
         return []
 
-    # Map column indices
-    headers = {}
-    for col_idx in range(len(df.columns)):
-        val = df.iloc[header_row, col_idx]
-        if pd.notna(val):
-            key = str(val).strip().lower().replace('\n', ' ')
-            headers[key] = col_idx
-
-    def find_col(*keywords):
-        for key, idx in headers.items():
-            if all(kw in key for kw in keywords):
-                return idx
-        return None
-
-    col_fio = find_col('фио')
-    col_birth = find_col('дата', 'рожд')
-    col_polis = find_col('полис')
-    col_prikr = find_col('дата', 'прикрепл')
-    col_otkr = find_col('дата', 'откреплен')
-    col_work = find_col('место', 'работ') or find_col('страхователь')
+    headers = build_header_map(df, header_row)
+    col_fio = find_col(headers, 'фио')
+    col_birth = find_col(headers, 'дата', 'рожд')
+    col_polis = find_col(headers, 'полис')
+    col_prikr = find_col(headers, 'дата', 'прикрепл')
+    col_otkr = find_col(headers, 'дата', 'откреплен')
+    col_work = find_col(headers, 'место', 'работ') or find_col(headers, 'страхователь')
 
     if col_fio is None:
         logger.error(f"ENERGOGARANT: Could not find 'ФИО' column in {filepath}")
         return []
 
-    # Extract strahovatel from "Место работы" column or from letter text
-    strahovatel = None
-
-    # Parse data rows
     for i in range(header_row + 1, len(df)):
-        fio = df.iloc[i, col_fio] if col_fio is not None else None
-
-        if pd.isna(fio) or str(fio).strip() == '':
+        fio = get_cell_str(df, i, col_fio)
+        if not fio:
             continue
-
-        fio_str = str(fio).strip()
-
-        # Skip footer rows
-        if any(w in fio_str.lower() for w in ['итого', 'всего', 'с уважением', 'директор', 'начальник']):
+        if any(w in fio.lower() for w in ['итого', 'всего', 'с уважением', 'директор', 'начальник']):
             break
 
-        fio_upper = fio_str.upper()
-
-        # Dates
-        start_date = _format_date(df.iloc[i, col_prikr]) if col_prikr is not None else None
-        end_date = _format_date(df.iloc[i, col_otkr]) if col_otkr is not None else None
-
-        # Policy
-        polis = None
-        if col_polis is not None and pd.notna(df.iloc[i, col_polis]):
-            polis = str(df.iloc[i, col_polis]).strip()
-
-        # Strahovatel from row (reset each row — don't leak across records)
-        strahovatel = None
-        if col_work is not None and pd.notna(df.iloc[i, col_work]):
-            strahovatel = str(df.iloc[i, col_work]).strip()
+        # Strahovatel from row (reset each row)
+        strahovatel = get_cell_str(df, i, col_work)
 
         record = {
-            'ФИО': fio_upper,
-            'Дата рождения': _format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
-            '№ полиса': polis,
-            'Начало обслуживания': start_date,
-            'Конец обслуживания': end_date,
+            'ФИО': fio.upper(),
+            'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
+            '№ полиса': get_cell_str(df, i, col_polis),
+            'Начало обслуживания': format_date(df.iloc[i, col_prikr]) if col_prikr is not None else None,
+            'Конец обслуживания': format_date(df.iloc[i, col_otkr]) if col_otkr is not None else None,
             'Страховая компания': 'Энергогарант',
             'Страхователь': strahovatel,
         }
@@ -102,19 +59,3 @@ def parse(filepath: str) -> list[dict]:
 
     logger.info(f"ENERGOGARANT: parsed {len(results)} records from {filepath}")
     return results
-
-
-def _format_date(val) -> str | None:
-    if pd.isna(val):
-        return None
-    if isinstance(val, datetime):
-        return val.strftime('%d.%m.%Y')
-    s = str(val).strip()
-    if not s:
-        return None
-    for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%d.%m.%Y', '%d/%m/%Y']:
-        try:
-            return datetime.strptime(s, fmt).strftime('%d.%m.%Y')
-        except ValueError:
-            continue
-    return s

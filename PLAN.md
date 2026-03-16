@@ -102,26 +102,16 @@ STARTTLS path has no `context=ssl.create_default_context()`.
 
 ---
 
-## Phase 3: Parser refactoring (extract `parsers/utils.py`)
-*Biggest maintainability win — eliminates ~400 lines of duplication*
+## Phase 3: Parser refactoring (DONE)
+*Deployed 2026-03-16*
 
-### 3.1 — Extract `_format_date()` to `parsers/utils.py`
-Identical 10-14 line function duplicated in all 15 parsers + generic_parser.
-
-### 3.2 — Extract `build_header_map()` + `find_col()` to `parsers/utils.py`
-Same header-building loop + closure in every parser.
-
-### 3.3 — Extract `find_header_row()` to `parsers/utils.py`
-Same 5-line loop checking `range(min(25, len(df)))` for keywords in every parser.
-
-### 3.4 — Extract `assemble_fio()` to `parsers/utils.py`
-FIO combination with `pd.notna` guards repeated in 7 parsers (sber, yugoriya, soglasie, psb, kaplife, ingos, luchi).
-
-### 3.5 — Consolidate `convert_xls_to_xlsx`
-Three implementations: `main.py:66`, `kaplife.py:18`, `renins.py:20`. `main.py` already calls it before dispatching to parsers — parser copies are redundant.
-
-### 3.6 — Extract `_extract_monthly_password_from_msg()` in `fetcher.py`
-Same password-extraction block copy-pasted 3 times (lines 104-120, 154-165, 177-187).
+- [x] **3.1** Extract `format_date()` to `parsers/utils.py`
+- [x] **3.2** Extract `build_header_map()` + `find_col()` to `parsers/utils.py`
+- [x] **3.3** Extract `find_header_row()` to `parsers/utils.py`
+- [x] **3.4** Extract `assemble_fio()` + `get_cell_str()` to `parsers/utils.py`
+- [x] **3.5** Remove redundant `_ensure_xlsx` from `kaplife.py` and `renins.py` (main.py handles conversion)
+- [x] **3.6** Extract `_extract_monthly_pwd_from_msg()` in `fetcher.py` (done in Phase 2)
+- [x] All 16 parsers refactored: reso, vsk, absolut, sber, yugoriya, psb, euroins, zetta, alfa, soglasie, kaplife, renins, ingos, luchi, energogarant, generic_parser
 
 ---
 
