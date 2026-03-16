@@ -11,9 +11,8 @@ logs/*.log
 output/*.xlsx
 processed_ids.json
 
-# Config with credentials (keep template, ignore real config)
-# Uncomment the line below after first setup:
-# config.yaml
+# Config with credentials — use config.example.yaml as template
+config.yaml
 
 # IDE
 .vscode/
@@ -25,6 +24,5 @@ processed_ids.json
 .DS_Store
 Thumbs.db
 
-# Test data (optional — uncomment if you don't want samples in repo)
-# test_files/
-config.yaml
+# Quarantine
+quarantine/

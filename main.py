@@ -65,11 +65,15 @@ def _build_skip_rules(config: dict) -> tuple[list[str], list[str]]:
     return skip_subs, skip_exts
 
 
-def should_skip_file(filename: str, config: dict, _cache={}) -> bool:
+_skip_rules_cache = None
+
+
+def should_skip_file(filename: str, config: dict) -> bool:
     """Check if file should be skipped based on config rules."""
-    if 'rules' not in _cache:
-        _cache['rules'] = _build_skip_rules(config)
-    skip_subs, skip_exts = _cache['rules']
+    global _skip_rules_cache
+    if _skip_rules_cache is None:
+        _skip_rules_cache = _build_skip_rules(config)
+    skip_subs, skip_exts = _skip_rules_cache
 
     lower = filename.lower()
     for sub in skip_subs:
