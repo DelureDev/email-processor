@@ -73,29 +73,30 @@ Matches non-date Russian phrases. Can pick up INN/OGRN as fake dates.
 
 ---
 
-## Phase 2: Security hardening
+## Phase 2: Security hardening (DONE)
+*Deployed 2026-03-16*
 
-### 2.1 — `fetcher.py:77,228` — sender domain check bypassable via display name
+- [x] **2.1 — `fetcher.py:77,228` — sender domain check bypassable via display name
 Substring match on full `From` header matches display names.
 **Fix:** Use `email.utils.parseaddr()` to extract addr-only, then match domain after `@`.
 
-### 2.2 — `notifier.py:113,120,129,141` — unsanitized values in HTML email
+- [x] **2.2 — `notifier.py:113,120,129,141` — unsanitized values in HTML email
 Company names, filenames, errors from untrusted sources injected raw into HTML.
 **Fix:** Wrap all f-string values with `html.escape()`.
 
-### 2.3 — `fetcher.py:221` — no attachment size limit
+- [x] **2.3 — `fetcher.py:221` — no attachment size limit
 Arbitrarily large attachment loaded into memory. Zip bomb risk in zetta extraction.
 **Fix:** Check payload size before writing (e.g., 50MB max configurable). Check `zf.getinfo(name).file_size` before extracting.
 
-### 2.4 — `fetcher.py:119,163,186` — monthly password `break` after first MIME part
+- [x] **2.4 — `fetcher.py:119,163,186` — monthly password `break` after first MIME part
 If password is in HTML (second part), it's missed for all 3 monthly-password extraction blocks.
 **Fix:** Remove `break`, try both plain and HTML parts.
 
-### 2.5 — `zetta_handler.py:81-95` — monthly password extraction too permissive
+- [x] **2.5 — `zetta_handler.py:81-95` — monthly password extraction too permissive
 **NEW** Any stray text line after the "period" line accepted as password → wrong password → all Zetta zips silently dropped.
 **Fix:** Validate candidate matches password-like pattern (alphanumeric, 4-20 chars). Add more negative-keyword filters.
 
-### 2.6 — `fetcher.py:58`, `notifier.py:187` — no explicit TLS context
+- [x] **2.6 — `fetcher.py:58`, `notifier.py:187` — no explicit TLS context
 STARTTLS path has no `context=ssl.create_default_context()`.
 **Fix:** Pass explicit SSL context to both IMAP4_SSL and smtp.starttls().
 
