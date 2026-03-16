@@ -1,0 +1,73 @@
+# ============================================
+# Email Processor Configuration — EXAMPLE
+# Copy this to config.yaml and fill in your values.
+# config.yaml is gitignored and never committed.
+# ============================================
+
+# --- IMAP Settings (incoming email) ---
+imap:
+  server: imap.yandex.ru
+  port: 993
+  username: "your-bot@yourdomain.ru"
+  password: "${IMAP_PASSWORD}"        # set env var, or paste password directly
+  folder: "INBOX"
+  days_back: 3                        # How many days back to scan
+  subject_keywords:
+    - "открепл"
+    - "спис"
+    - "прикрепл"
+    - "бордеро"
+    - "застрахованн"
+    - "изменени"
+    - "дополнительная информация"
+    - "пароль"
+    - "soglasie"
+    - "капитал лайф"
+
+# --- SMTP Settings (outgoing email reports) ---
+smtp:
+  enabled: true
+  server: smtp.yandex.ru
+  port: 465
+  use_ssl: true
+  username: "your-bot@yourdomain.ru"
+  password: "${SMTP_PASSWORD}"        # set env var, or paste password directly
+  from_address: "your-bot@yourdomain.ru"
+  recipients:
+    - "you@yourdomain.ru"
+  only_if_new_records: true
+
+# --- Processing ---
+processing:
+  temp_folder: "./temp"
+  processed_ids_file: "./processed_ids.json"
+  quarantine_folder: "./quarantine"   # files that fail parsing land here
+  deduplicate: true
+
+# --- Healthcheck (https://healthchecks.io — free tier) ---
+# Paste your ping URL here. Leave empty to disable.
+healthcheck_url: ""   # e.g. https://hc-ping.com/your-uuid-here
+
+# --- Output ---
+output:
+  master_file: "./output/master.xlsx"
+
+# --- Logging ---
+logging:
+  file: "./logs/processor.log"
+  level: "INFO"
+
+# --- Skip rules ---
+skip_rules:
+  filename_contains:
+    - "_all."
+    - "_all_"
+    - "Ср("
+  ignore_extensions:
+    - ".pdf"
+    - ".docx"
+    - ".doc"
+    - ".jpg"
+    - ".png"
+    - ".rtf"
+    - ".sig"
