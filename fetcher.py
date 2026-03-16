@@ -5,6 +5,7 @@ import imaplib
 import email
 import email.utils
 import ssl
+import sqlite3
 import time
 from email.header import decode_header
 import os
@@ -74,25 +75,63 @@ class IMAPFetcher:
         self.subject_keywords = config['imap'].get('subject_keywords', [])
         self.temp_folder = config['processing']['temp_folder']
         self.processed_file = config['processing']['processed_ids_file']
+        json_path = self.processed_file
+        self._db_path = (json_path[:-5] if json_path.endswith('.json') else json_path) + '.db'
         self.dry_run = dry_run
         self.processed_ids = self._load_processed_ids()
 
         os.makedirs(self.temp_folder, exist_ok=True)
 
     def _load_processed_ids(self) -> set:
-        if os.path.exists(self.processed_file):
-            with open(self.processed_file, 'r') as f:
-                return set(json.load(f))
-        return set()
+        conn = sqlite3.connect(self._db_path)
+        try:
+            conn.execute(
+                'CREATE TABLE IF NOT EXISTS processed_ids '
+                '(message_id TEXT PRIMARY KEY, seen_at TEXT NOT NULL)'
+            )
+            conn.commit()
+            # One-time migration from JSON
+            if os.path.exists(self.processed_file):
+                try:
+                    with open(self.processed_file, 'r') as f:
+                        ids = json.load(f)
+                    now = datetime.now().isoformat()
+                    conn.executemany(
+                        'INSERT OR IGNORE INTO processed_ids (message_id, seen_at) VALUES (?, ?)',
+                        [(mid, now) for mid in ids],
+                    )
+                    conn.commit()
+                    os.rename(self.processed_file, self.processed_file + '.migrated')
+                    logger.info(f"Migrated {len(ids)} processed IDs from JSON to SQLite ({self._db_path})")
+                except Exception as e:
+                    logger.warning(f"Could not migrate processed_ids.json: {e}")
+            rows = conn.execute('SELECT message_id FROM processed_ids').fetchall()
+            return set(row[0] for row in rows)
+        finally:
+            conn.close()
 
     def _save_processed_ids(self):
-        # Cap to last 5000 IDs to prevent unbounded growth
-        ids_list = list(self.processed_ids)
-        if len(ids_list) > 5000:
-            ids_list = ids_list[-5000:]
-            self.processed_ids = set(ids_list)
-        with open(self.processed_file, 'w') as f:
-            json.dump(ids_list, f, indent=2)
+        now = datetime.now().isoformat()
+        conn = sqlite3.connect(self._db_path)
+        try:
+            conn.execute(
+                'CREATE TABLE IF NOT EXISTS processed_ids '
+                '(message_id TEXT PRIMARY KEY, seen_at TEXT NOT NULL)'
+            )
+            conn.executemany(
+                'INSERT OR IGNORE INTO processed_ids (message_id, seen_at) VALUES (?, ?)',
+                [(mid, now) for mid in self.processed_ids],
+            )
+            # Cap to 5000 most recent entries (by seen_at)
+            count = conn.execute('SELECT COUNT(*) FROM processed_ids').fetchone()[0]
+            if count > 5000:
+                conn.execute(
+                    'DELETE FROM processed_ids WHERE message_id NOT IN '
+                    '(SELECT message_id FROM processed_ids ORDER BY seen_at DESC LIMIT 5000)'
+                )
+            conn.commit()
+        finally:
+            conn.close()
 
     def connect(self, retries: int = 3, delay: float = 5.0):
         """Connect to Yandex IMAP. Retries up to `retries` times on failure."""
