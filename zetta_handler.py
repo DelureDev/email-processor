@@ -181,12 +181,9 @@ def unzip_with_password(zip_path: str, password: str, extract_to: str) -> list[s
 def try_passwords(zip_path: str, passwords: list[str], extract_to: str) -> list[str]:
     """Try multiple passwords against a zip file. Returns extracted xlsx paths."""
     for pwd in passwords:
-        try:
-            result = unzip_with_password(zip_path, pwd, extract_to)
-            if result:
-                return result
-        except Exception:
-            continue
+        result = unzip_with_password(zip_path, pwd, extract_to)
+        if result:
+            return result
 
     logger.error(f"All passwords failed for {zip_path}")
     return []

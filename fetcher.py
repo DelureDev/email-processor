@@ -9,6 +9,7 @@ from email.header import decode_header
 import os
 import re
 import json
+import tempfile
 import logging
 from datetime import datetime, timedelta
 
@@ -84,8 +85,13 @@ class IMAPFetcher:
         return set()
 
     def _save_processed_ids(self):
+        # Cap to last 5000 IDs to prevent unbounded growth
+        ids_list = list(self.processed_ids)
+        if len(ids_list) > 5000:
+            ids_list = ids_list[-5000:]
+            self.processed_ids = set(ids_list)
         with open(self.processed_file, 'w') as f:
-            json.dump(list(self.processed_ids), f, indent=2)
+            json.dump(ids_list, f, indent=2)
 
     def connect(self):
         """Connect to Yandex IMAP."""
@@ -271,7 +277,7 @@ class IMAPFetcher:
         if zetta_zips and zetta_passwords:
             logger.info(f"Processing {len(zetta_zips)} Zetta zips with {len(zetta_passwords)} passwords")
             for zip_path, info in zetta_zips:
-                extract_dir = os.path.join(self.temp_folder, 'zetta_extracted')
+                extract_dir = tempfile.mkdtemp(dir=self.temp_folder, prefix='zetta_')
                 xlsx_files = try_passwords(zip_path, zetta_passwords, extract_dir)
                 for xlsx_path in xlsx_files:
                     results.append({
@@ -281,6 +287,7 @@ class IMAPFetcher:
                         'subject': info['subject'],
                         'date': info['date'],
                         'message_id': info['message_id'],
+                        '_extract_dir': extract_dir,
                     })
                 # Clean up zip
                 try:

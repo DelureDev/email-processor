@@ -84,9 +84,9 @@ def should_skip(filename):
 def scan_inbox(config, days_back):
     """Connect to IMAP and list all emails with attachments."""
     imap_cfg = config.get("imap", config)  # handle both nested and flat config
-    host = imap_cfg.get("host", "imap.yandex.ru")
+    host = imap_cfg.get("server") or imap_cfg.get("host", "imap.yandex.ru")
     port = imap_cfg.get("port", 993)
-    user = imap_cfg.get("user") or imap_cfg.get("username") or imap_cfg.get("login")
+    user = imap_cfg.get("username") or imap_cfg.get("user") or imap_cfg.get("login")
     password = imap_cfg.get("password") or imap_cfg.get("app_password")
     folder = imap_cfg.get("folder", "INBOX")
 
@@ -169,6 +169,7 @@ def scan_master(config):
     # Try common paths
     master_path = None
     candidates = [
+        config.get("output", {}).get("master_file", ""),
         config.get("output", {}).get("master_path", ""),
         config.get("master_path", ""),
         "output/master.xlsx",

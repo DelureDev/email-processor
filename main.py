@@ -44,22 +44,26 @@ def load_config(path: str = 'config.yaml') -> dict:
         return yaml.safe_load(f)
 
 
-def should_skip_file(filename: str, config: dict) -> bool:
+def _build_skip_rules(config: dict) -> tuple[list[str], list[str]]:
+    """Precompute lowercased skip rules from config (call once at startup)."""
+    skip_subs = [s.lower() for s in config.get('skip_rules', {}).get('filename_contains', [])]
+    skip_exts = [e.lower() for e in config.get('skip_rules', {}).get('ignore_extensions', [])]
+    return skip_subs, skip_exts
+
+
+def should_skip_file(filename: str, config: dict, _cache={}) -> bool:
     """Check if file should be skipped based on config rules."""
+    if 'rules' not in _cache:
+        _cache['rules'] = _build_skip_rules(config)
+    skip_subs, skip_exts = _cache['rules']
+
     lower = filename.lower()
-
-    # Skip by filename substring
-    skip_subs = config.get('skip_rules', {}).get('filename_contains', [])
     for sub in skip_subs:
-        if sub.lower() in lower:
+        if sub in lower:
             return True
-
-    # Skip by extension
-    skip_exts = config.get('skip_rules', {}).get('ignore_extensions', [])
     for ext in skip_exts:
-        if lower.endswith(ext.lower()):
+        if lower.endswith(ext):
             return True
-
     return False
 
 
@@ -84,6 +88,17 @@ def convert_xls_to_xlsx(filepath: str) -> str | None:
 
     # Fallback: could not convert
     return None
+
+
+def _dedup_xls_xlsx(files: list[str]) -> list[str]:
+    """When both .xls and .xlsx exist for the same stem, keep only .xlsx."""
+    by_stem = {}
+    for f in files:
+        stem = os.path.splitext(f)[0]
+        ext = os.path.splitext(f)[1].lower()
+        if stem not in by_stem or ext == '.xlsx':
+            by_stem[stem] = f
+    return list(by_stem.values())
 
 
 def process_file(filepath: str, master_path: str, config: dict, stats: dict,
@@ -224,6 +239,20 @@ def run_imap_mode(config: dict, dry_run: bool = False):
                 os.remove(att['filepath'])
             except OSError:
                 pass
+            # Clean up converted .xlsx if original was .xls
+            if att['filepath'].lower().endswith('.xls'):
+                try:
+                    os.remove(os.path.splitext(att['filepath'])[0] + '.xlsx')
+                except OSError:
+                    pass
+            # Clean up Zetta extract dir
+            extract_dir = att.get('_extract_dir')
+            if extract_dir:
+                import shutil
+                try:
+                    shutil.rmtree(extract_dir, ignore_errors=True)
+                except OSError:
+                    pass
     except Exception as e:
         logger.error(f"IMAP error: {e}", exc_info=True)
         stats['errors'].append(f"IMAP error: {e}")
@@ -252,7 +281,9 @@ def run_local_mode(folder: str, config: dict, dry_run: bool = False):
         existing_keys = load_existing_keys(master_path)
         logger.info(f"Loaded {len(existing_keys)} existing records for dedup")
 
-    files = glob.glob(os.path.join(folder, '*.xlsx')) + glob.glob(os.path.join(folder, '*.xls'))
+    files = _dedup_xls_xlsx(
+        glob.glob(os.path.join(folder, '*.xlsx')) + glob.glob(os.path.join(folder, '*.xls'))
+    )
     logger.info(f"Found {len(files)} files in {folder}")
 
     for filepath in sorted(files):
@@ -271,7 +302,9 @@ def run_local_mode(folder: str, config: dict, dry_run: bool = False):
 def run_test_mode(folder: str, config: dict):
     """Test mode: parse files and show results, don't write anything."""
     logger = logging.getLogger(__name__)
-    files = glob.glob(os.path.join(folder, '*.xlsx')) + glob.glob(os.path.join(folder, '*.xls'))
+    files = _dedup_xls_xlsx(
+        glob.glob(os.path.join(folder, '*.xlsx')) + glob.glob(os.path.join(folder, '*.xls'))
+    )
     print(f"\n{'='*70}")
     print(f"TEST MODE — {len(files)} files found")
     print(f"{'='*70}\n")

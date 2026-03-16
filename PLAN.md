@@ -115,60 +115,17 @@ STARTTLS path has no `context=ssl.create_default_context()`.
 
 ---
 
-## Phase 4: Robustness & cleanup
+## Phase 4: Robustness & cleanup (DONE)
+*Deployed 2026-03-16*
 
-### 4.1 — `zetta_handler.py:180-185` — redundant try/except in `try_passwords`
-`unzip_with_password` already catches all exceptions internally. Outer wrap is dead code.
-**Fix:** Remove try/except, call directly.
-
-### 4.2 — `kaplife.py:22`, `renins.py:24` — subprocess not wrapped for FileNotFoundError
-If LibreOffice not installed, unhandled `FileNotFoundError` crashes the parser.
-**Fix:** Wrap in `try/except (FileNotFoundError, subprocess.TimeoutExpired)`.
-
-### 4.3 — `kaplife.py:26` — fragile `filepath + 'x'` path construction
-Works by coincidence for `.xls` but not `.XLS`. Redundant after Phase 3.5.
-**Fix:** Remove once `convert_xls_to_xlsx` is consolidated.
-
-### 4.4 — `fetcher.py:255` — shared `zetta_extracted/` dir never cleaned
-Files accumulate across runs. Same-named file from different zip overwrites previous.
-**Fix:** Use `tempfile.mkdtemp(dir=self.temp_folder)` per zip, delete after processing.
-
-### 4.5 — `fetcher.py:46-54` — `processed_ids.json` grows unbounded
-Every email ID ever seen is stored. Gets slow over months.
-**Fix:** Cap to last 30-60 days of IDs on save. Or switch to SQLite.
-
-### 4.6 — `main.py:52-60` — `should_skip_file` rebuilds lowercase lists per call
-**Fix:** Precompute lowercased lists once at startup, pass them in or store on config.
-
-### 4.7 — `main.py:256,275` — glob may double-process .xls + .xlsx
-If a `.xls` was converted to `.xlsx` in a previous run, both appear in the glob.
-**Fix:** Deduplicate by stem name; prefer `.xlsx` when both exist.
-
-### 4.8 — `main.py:103-104` — original .xls leaked in temp after conversion
-**NEW** Original `.xls` path is never deleted after successful conversion in IMAP mode.
-**Fix:** Save original path, delete after successful conversion.
-
-### 4.9 — `diagnostic.py:87-90` — config key mismatch
-**NEW** Uses `host`/`user` but config has `server`/`username`.
-**Fix:** Add correct fallback keys.
-
-### 4.10 — `writer.py:113` — silent fallback to active sheet
-**NEW** If "Данные" sheet is missing (manual rename), falls back to active sheet silently.
-**Fix:** Raise clear error instead of silent fallback.
-
-### 4.11 — `writer.py:68-70` — mutates caller's record dicts
-**NEW** Adds `Источник файла` and `Дата обработки` to original dicts in place.
-**Fix:** Copy records before mutation, or document the contract.
-
----
-
-## Recommended order
-
-| Session | Phase | Effort | Impact |
-|---------|-------|--------|--------|
-| 1 | Phase 1 (1.1–1.5) | ~30 min | Fixes crashes + silent data loss |
-| 2 | Phase 1 (1.6–1.11) | ~30 min | Fixes parser data integrity |
-| 3 | Phase 2 (2.1–2.6) | ~30 min | Security hardening |
-| 4 | Phase 3 (3.1–3.4) | ~45 min | Parser utils extraction (biggest refactor) |
-| 5 | Phase 3 (3.5–3.6) | ~15 min | Consolidate remaining duplication |
-| 6 | Phase 4 (4.1–4.11) | ~30 min | Cleanup and robustness |
+- [x] **4.1** Remove redundant try/except in `try_passwords` (`zetta_handler.py`)
+- [x] **4.2** Remove `_ensure_xlsx` from `kaplife.py`, `renins.py` (done in Phase 3)
+- [x] **4.3** Remove fragile `filepath + 'x'` path construction (done in Phase 3)
+- [x] **4.4** Use per-zip `tempfile.mkdtemp` instead of shared `zetta_extracted/` dir, clean up after processing (`fetcher.py`, `main.py`)
+- [x] **4.5** Cap `processed_ids.json` to 5000 entries to prevent unbounded growth (`fetcher.py`)
+- [x] **4.6** Precompute lowercased skip rules once via `_build_skip_rules` cache (`main.py`)
+- [x] **4.7** Deduplicate .xls+.xlsx by stem in local/test mode — prefer .xlsx (`main.py`)
+- [x] **4.8** Clean up converted .xlsx and Zetta extract dirs in IMAP mode (`main.py`)
+- [x] **4.9** Fix config key mismatch: `server`/`username` fallbacks + `master_file` lookup (`diagnostic.py`)
+- [x] **4.10** Raise clear error if "Данные" sheet missing instead of silent fallback (`writer.py`)
+- [x] **4.11** Copy records before adding metadata fields to avoid mutating caller's dicts (`writer.py`)

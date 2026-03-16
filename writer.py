@@ -65,9 +65,7 @@ def write_to_master(records: list[dict], master_path: str, source_filename: str 
     os.makedirs(os.path.dirname(master_path) or '.', exist_ok=True)
 
     now = datetime.now().strftime('%d.%m.%Y %H:%M')
-    for r in records:
-        r['Источник файла'] = source_filename
-        r['Дата обработки'] = now
+    records = [{**r, 'Источник файла': source_filename, 'Дата обработки': now} for r in records]
 
     if os.path.exists(master_path):
         _append_to_existing(records, master_path)
@@ -110,7 +108,9 @@ def _create_new(records: list[dict], path: str):
 
 def _append_to_existing(records: list[dict], path: str):
     wb = load_workbook(path)
-    ws = wb['Данные'] if 'Данные' in wb.sheetnames else wb.active
+    if 'Данные' not in wb.sheetnames:
+        raise ValueError(f"Sheet 'Данные' not found in {path}. Available sheets: {wb.sheetnames}")
+    ws = wb['Данные']
 
     # Find actual last data row (max_row may include empty styled rows)
     next_row = ws.max_row + 1
