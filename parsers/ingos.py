@@ -113,7 +113,7 @@ def parse(filepath: str) -> list[dict]:
 
         # Get dates
         start_date = _clean_date(df.iloc[i, col_prikr]) if col_prikr is not None else None
-        end_date = _clean_date(df.iloc[i, col_otkr]) if col_otkr is not None else dogovor_end
+        end_date = _clean_date(df.iloc[i, col_otkr]) if col_otkr is not None else None
 
         # Get policy
         polis = None

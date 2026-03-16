@@ -45,7 +45,7 @@ def parse(filepath: str) -> list[dict]:
     col_fio = find_col('фио')
     col_birth = find_col('дата', 'рожд')
     col_polis = find_col('полис')
-    col_otkr = find_col('откреплен') or find_col('окончан')
+    col_otkr = find_col('откреплен') or find_col('оконч', 'обслуж') or find_col('окончан')
     col_start = find_col('начало', 'обслуж')
     col_strahovatel = find_col('страхователь')
 

@@ -12,6 +12,15 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
+# English month names for IMAP SEARCH (strftime %b is locale-dependent)
+_IMAP_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+
+def _imap_date(dt) -> str:
+    """Format date for IMAP SEARCH (always English month names)."""
+    return f"{dt.day:02d}-{_IMAP_MONTHS[dt.month - 1]}-{dt.year}"
+
 
 def decode_mime_header(header_value):
     """Decode MIME encoded header (supports Russian encodings)."""
@@ -97,7 +106,7 @@ class IMAPFetcher:
         zetta_passwords = []  # passwords found in Zetta emails (monthly first, then per-email)
 
         # Pre-scan: search for Zetta monthly password (go back 35 days to catch 1st-of-month email)
-        pwd_since = (datetime.now() - timedelta(days=35)).strftime("%d-%b-%Y")
+        pwd_since = _imap_date(datetime.now() - timedelta(days=35))
         status, pwd_msgs = self.mail.search(None, f'(SINCE {pwd_since} FROM "parollpu@zettains.ru")')
         if status == 'OK' and pwd_msgs[0]:
             for msg_id in pwd_msgs[0].split():
@@ -121,7 +130,7 @@ class IMAPFetcher:
                     logger.debug(f"Error reading password email: {e}")
 
         # Main search for recent emails
-        since_date = (datetime.now() - timedelta(days=days_back)).strftime("%d-%b-%Y")
+        since_date = _imap_date(datetime.now() - timedelta(days=days_back))
         status, messages = self.mail.search(None, f'(SINCE {since_date})')
 
         if status != 'OK':
@@ -217,8 +226,11 @@ class IMAPFetcher:
                 filepath = os.path.join(self.temp_folder, safe_name)
 
                 try:
+                    payload = part.get_payload(decode=True)
+                    if payload is None:
+                        continue
                     with open(filepath, 'wb') as f:
-                        f.write(part.get_payload(decode=True))
+                        f.write(payload)
                 except OSError as e:
                     logger.error(f"Failed to save attachment {safe_name}: {e}")
                     continue

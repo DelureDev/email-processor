@@ -61,7 +61,7 @@ def parse(filepath: str) -> list[dict]:
                         break
 
             # "на срок: с DD.MM.YYYY г. по DD.MM.YYYY г."
-            if 'на срок' in val_str.lower() or ('с ' in val_str and ' по ' in val_str):
+            if 'на срок' in val_str.lower() or ('с ' in val_str and ' по ' in val_str and re.search(r'\d{2}\.\d{2}\.\d{4}', val_str)):
                 # Check same cell and next columns
                 combined = val_str
                 for k in range(j + 1, min(j + 3, len(df.columns))):

@@ -151,12 +151,16 @@ def unzip_with_password(zip_path: str, password: str, extract_to: str) -> list[s
                         logger.error(f"Zip Slip blocked: {name}")
                         continue
                     # Try cp866 first (7-Zip default for Cyrillic), fall back to utf-8
+                    success = False
                     for encoding in ('cp866', 'utf-8'):
                         try:
                             zf.extract(name, extract_to, pwd=password.encode(encoding))
+                            success = True
                             break
                         except RuntimeError:
                             continue
+                    if not success:
+                        continue
                     extracted.append(full_path)
                     logger.info(f"Extracted: {name}")
 

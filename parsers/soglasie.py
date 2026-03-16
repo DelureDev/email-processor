@@ -32,22 +32,25 @@ def parse(filepath: str) -> list[dict]:
                 continue
             val_str = str(val).strip()
 
-            # "Прикрепление с: DD.MM.YYYY по: DD.MM.YYYY"
-            if 'прикрепление' in val_str.lower() or 'открепление' in val_str.lower():
-                # Start date might be in same cell or next column
-                dates = re.findall(r'\d{2}\.\d{2}\.\d{4}', val_str)
-                if dates and start_date is None:
-                    start_date = dates[0]
-                # Check next columns for dates
+            # "Прикрепление с: DD.MM.YYYY по: DD.MM.YYYY" or "Открепление ..."
+            is_prikr = 'прикрепление' in val_str.lower()
+            is_otkr = 'открепление' in val_str.lower()
+            if is_prikr or is_otkr:
+                # Collect all dates from this cell and adjacent columns
+                all_dates = re.findall(r'\d{2}\.\d{2}\.\d{4}', val_str)
                 for k in range(j + 1, min(j + 4, len(df.columns))):
                     next_val = df.iloc[i, k]
                     if pd.notna(next_val):
-                        more_dates = re.findall(r'\d{2}\.\d{2}\.\d{4}', str(next_val))
-                        for d in more_dates:
-                            if start_date is None:
-                                start_date = d
-                            elif end_date is None:
-                                end_date = d
+                        all_dates.extend(re.findall(r'\d{2}\.\d{2}\.\d{4}', str(next_val)))
+                if is_otkr and all_dates:
+                    # For detachment: dates are end dates
+                    if end_date is None:
+                        end_date = all_dates[0]
+                elif is_prikr and all_dates:
+                    if start_date is None:
+                        start_date = all_dates[0]
+                    if len(all_dates) >= 2 and end_date is None:
+                        end_date = all_dates[1]
 
             # "Организация: <name>"
             if 'организация' in val_str.lower() and ':' in val_str:

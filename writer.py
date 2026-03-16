@@ -112,7 +112,12 @@ def _append_to_existing(records: list[dict], path: str):
     wb = load_workbook(path)
     ws = wb['Данные'] if 'Данные' in wb.sheetnames else wb.active
 
+    # Find actual last data row (max_row may include empty styled rows)
     next_row = ws.max_row + 1
+    for r in range(ws.max_row, 0, -1):
+        if any(ws.cell(row=r, column=c).value is not None for c in range(1, len(COLUMNS) + 1)):
+            next_row = r + 1
+            break
 
     for row_idx, record in enumerate(records, next_row):
         for col_idx, col_name in enumerate(COLUMNS, 1):

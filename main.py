@@ -136,7 +136,7 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
         return 0
 
     # Deduplicate against existing master
-    if config.get('processing', {}).get('deduplicate', True) and existing_keys:
+    if config.get('processing', {}).get('deduplicate', True) and existing_keys is not None:
         original_count = len(records)
         records = [r for r in records if _record_key(r) not in existing_keys]
         dupes = original_count - len(records)
@@ -250,8 +250,7 @@ def run_local_mode(folder: str, config: dict, dry_run: bool = False):
     existing_keys = None
     if config.get('processing', {}).get('deduplicate', True):
         existing_keys = load_existing_keys(master_path)
-        if existing_keys:
-            logger.info(f"Loaded {len(existing_keys)} existing records for dedup")
+        logger.info(f"Loaded {len(existing_keys)} existing records for dedup")
 
     files = glob.glob(os.path.join(folder, '*.xlsx')) + glob.glob(os.path.join(folder, '*.xls'))
     logger.info(f"Found {len(files)} files in {folder}")
@@ -286,7 +285,11 @@ def run_test_mode(folder: str, config: dict):
             continue
 
         if filepath.lower().endswith('.xls'):
-            filepath = convert_xls_to_xlsx(filepath) or filepath
+            converted = convert_xls_to_xlsx(filepath)
+            if converted is None:
+                print(f"❌ CONVERT FAILED: {filename}")
+                continue
+            filepath = converted
 
         fmt = detect_format(filepath)
         if fmt is None:
