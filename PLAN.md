@@ -24,50 +24,50 @@ Items marked with `[x]` are already fixed.
 
 ---
 
-## Phase 1: Data integrity bugs
-*Fix these first — they cause silent wrong data or crashes*
+## Phase 1: Data integrity bugs (DONE)
+*Deployed 2026-03-16*
 
-### 1.1 — `zetta_handler.py:154-160` — extracted path appended even on failure
+- [x] **1.1 — `zetta_handler.py:154-160` — extracted path appended even on failure
 **NEW** The `for encoding` loop appends `full_path` to `extracted` unconditionally. If both cp866 and utf-8 fail, a non-existent file path is returned, causing `FileNotFoundError` downstream.
 **Fix:** Move `extracted.append(full_path)` inside the try block after successful `zf.extract()`, use a `success` flag.
 
-### 1.2 — `fetcher.py:221` — `get_payload(decode=True)` can return `None`
+- [x] **1.2 — `fetcher.py:221` — `get_payload(decode=True)` can return `None`
 **NEW** Malformed MIME part → `TypeError` on `f.write(None)` → crashes entire email loop.
 **Fix:** `payload = part.get_payload(decode=True); if payload is None: continue`
 
-### 1.3 — `main.py:139` — dedup truthy check on empty set
+- [x] **1.3 — `main.py:139` — dedup truthy check on empty set
 `and existing_keys:` is `False` for empty `set()`. Dedup silently skipped on first run with empty master.
 **Fix:** Change to `and existing_keys is not None:`
 
-### 1.4 — `writer.py:115` — `ws.max_row` includes empty styled rows
+- [x] **1.4 — `writer.py:115` — `ws.max_row` includes empty styled rows
 Causes blank row gaps between batches. Autofilter range includes blanks.
 **Fix:** Scan backwards from `max_row` to find last non-empty row.
 
-### 1.5 — `fetcher.py:100,124` — locale-dependent `%b` in strftime
+- [x] **1.5 — `fetcher.py:100,124` — locale-dependent `%b` in strftime
 **NEW** On Russian locale, `%b` → `"Мар"` instead of `"Mar"`. IMAP SEARCH fails silently (returns 0 results).
 **Fix:** Use English month names manually: `MONTHS = ['Jan','Feb',...]; f"{d.day:02d}-{MONTHS[d.month-1]}-{d.year}"`
 
-### 1.6 — `parsers/soglasie.py:36-50` — открепление date assigned as start_date
+- [x] **1.6 — `parsers/soglasie.py:36-50` — открепление date assigned as start_date
 **NEW** For detachment files, the detachment date is wrongly stored as `start_date`.
 **Fix:** Check if keyword is `'открепление'` → assign to `end_date` instead.
 
-### 1.7 — `parsers/ingos.py:116` — contract end date used as patient end date
+- [x] **1.7 — `parsers/ingos.py:116` — contract end date used as patient end date
 When `col_otkr` column not found, `dogovor_end` is assigned as personal end date for all patients.
 **Fix:** Leave `end_date = None` when column not found (don't guess).
 
-### 1.8 — `parsers/reso.py:48` — `find_col('окончан')` too broad
+- [x] **1.8 — `parsers/reso.py:48` — `find_col('окончан')` too broad
 Can match "Дата окончания договора" instead of the per-patient end column.
 **Fix:** `find_col('оконч', 'обслуж')` to require both keywords.
 
-### 1.9 — `parsers/renins.py:64` — `'с '... ' по '` date detection too broad
+- [x] **1.9 — `parsers/renins.py:64` — `'с '... ' по '` date detection too broad
 Matches non-date Russian phrases. Can pick up INN/OGRN as fake dates.
 **Fix:** Add `re.search(r'\d{2}\.\d{2}\.\d{4}', val_str)` guard.
 
-### 1.10 — `parsers/alfa.py:29-56` — hardcoded column indices
+- [x] **1.10 — `parsers/alfa.py:29-56` — hardcoded column indices
 **NEW** Only parser without header-based detection. Silent data corruption if AlfaStrakhovanie changes layout.
 **Fix:** Add `find_col()` header-based mapping like all other parsers.
 
-### 1.11 — `main.py:289` — test mode passes .xls after failed conversion
+- [x] **1.11 — `main.py:289` — test mode passes .xls after failed conversion
 **NEW** After `convert_xls_to_xlsx` returns `None`, `or filepath` passes raw .xls → confusing error.
 **Fix:** Print conversion failure and `continue`.
 
