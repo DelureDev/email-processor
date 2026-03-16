@@ -44,6 +44,33 @@ def detect_by_sender(sender: str) -> str | None:
     return None
 
 
+# ─── Content-based detection rules ──────────────────────────────────────────
+# Each entry: (format_name, required_keywords_tuple)
+# All keywords must appear in the text blob (first 25 rows, lowercased).
+# Order matters — more specific rules first.
+CONTENT_RULES: list[tuple[str, tuple[str, ...]]] = [
+    ('reso',        ('ресо-гарантия',)),
+    ('reso',        ('ресо',)),
+    ('yugoriya',    ('югория',)),
+    ('zetta',       ('зетта', 'страхован')),
+    ('alfa',        ('альфастрахован',)),
+    ('sber',        ('сбербанк страхован',)),
+    ('sber',        ('список застрахованных лиц', 'фамилия')),
+    ('soglasie',    ('согласие', 'фамилия')),
+    ('absolut',     ('абсолют', 'страхован')),
+    ('psb',         ('псб', 'страхован')),
+    ('kaplife',     ('капитал лайф',)),
+    ('kaplife',     ('капитал', 'страхован', 'жизни')),
+    ('euroins',     ('евроинс',)),
+    ('renins',      ('ренессанс',)),
+    ('luchi',       ('лучи здоровье',)),
+    ('energogarant',('энергогарант',)),
+    ('ingos',       ('ингосстрах',)),
+    ('vsk',         ('вск', 'фио')),
+    ('vsk',         ('контингента',)),
+]
+
+
 def detect_format(filepath: str, sender: str = None) -> str | None:
     """
     Detect which format the xlsx file is.
@@ -65,92 +92,18 @@ def detect_format(filepath: str, sender: str = None) -> str | None:
             df = xl.parse(sheet_name=xl.sheet_names[0], header=None, nrows=25)
         text_blob = ' '.join(str(v) for v in df.values.flat if pd.notna(v)).lower()
 
-        # --- Format A: RESO-Garantiya style ---
-        if 'ресо-гарантия' in text_blob or 'ресо' in text_blob:
-            logger.info(f"Detected format: RESO ({filepath})")
-            return 'reso'
+        for fmt, keywords in CONTENT_RULES:
+            if all(kw in text_blob for kw in keywords):
+                logger.info(f"Detected format: {fmt.upper()} ({filepath})")
+                return fmt
 
-        # --- Format B: Yugoriya style ---
-        if 'югория' in text_blob:
-            logger.info(f"Detected format: YUGORIYA ({filepath})")
-            return 'yugoriya'
-
-        # --- Format C: Zetta style ---
-        if 'зетта' in text_blob and 'страхован' in text_blob:
-            logger.info(f"Detected format: ZETTA ({filepath})")
-            return 'zetta'
-
-        # --- Format D: AlfaStrakhovanie style ---
-        if 'альфастрахован' in text_blob:
-            logger.info(f"Detected format: ALFA ({filepath})")
-            return 'alfa'
-
-        # --- Format E: Sberbank Strakhovanie style ---
-        if 'сбербанк страхован' in text_blob or ('список застрахованных лиц' in text_blob and 'фамилия' in text_blob):
-            logger.info(f"Detected format: SBER ({filepath})")
-            return 'sber'
-
-        # --- Format F: Soglasie style ---
-        if 'согласие' in text_blob and 'фамилия' in text_blob:
-            logger.info(f"Detected format: SOGLASIE ({filepath})")
-            return 'soglasie'
-
-        # --- Format H: Absolut Strakhovanie style ---
-        if 'абсолют' in text_blob and 'страхован' in text_blob:
-            logger.info(f"Detected format: ABSOLUT ({filepath})")
-            return 'absolut'
-
-        # --- Format I: PSB Strakhovanie style ---
-        if 'псб' in text_blob and 'страхован' in text_blob:
-            logger.info(f"Detected format: PSB ({filepath})")
-            return 'psb'
-
-        # --- Format J: Kapital Life style ---
-        if 'капитал лайф' in text_blob or ('капитал' in text_blob and 'страхован' in text_blob and 'жизни' in text_blob):
-            logger.info(f"Detected format: KAPLIFE ({filepath})")
-            return 'kaplife'
-
-        # --- Format K: Euroins style ---
-        if 'евроинс' in text_blob:
-            logger.info(f"Detected format: EUROINS ({filepath})")
-            return 'euroins'
-
-        # --- Format L: Renessans Strakhovanie style ---
-        if 'ренессанс' in text_blob:
-            logger.info(f"Detected format: RENINS ({filepath})")
-            return 'renins'
-
-        # --- Format N: Лучи Здоровье style ---
-        if 'лучи здоровье' in text_blob:
-            logger.info(f"Detected format: LUCHI ({filepath})")
-            return 'luchi'
-
-        # --- Format O: Энергогарант style ---
-        if 'энергогарант' in text_blob:
-            logger.info(f"Detected format: ENERGOGARANT ({filepath})")
-            return 'energogarant'
-
-        # --- Format M: Ingosstrakh (SPISKI_LPU) style ---
-        if 'ингосстрах' in text_blob:
-            logger.info(f"Detected format: INGOS ({filepath})")
-            return 'ingos'
-
-        # --- Format G: VSK style ---
-        if ('вск' in text_blob and 'фио' in text_blob) or 'контингента' in text_blob:
-            logger.info(f"Detected format: VSK ({filepath})")
-            return 'vsk'
-
-        # --- Fallback: generic detection by column headers ---
+        # Fallback: generic detection by column headers
         for row_idx in range(min(20, len(df))):
             row_values = [str(v).lower().strip() for v in df.iloc[row_idx] if pd.notna(v)]
             row_text = ' '.join(row_values)
-
-            # Generic format with ФИО column
             if 'фио' in row_text and ('полис' in row_text or '№ полиса' in row_text):
                 logger.info(f"Detected format: GENERIC_FIO ({filepath})")
                 return 'generic_fio'
-
-            # Generic format with separate Фамилия/Имя/Отчество
             if 'фамилия' in row_text and 'имя' in row_text:
                 logger.info(f"Detected format: GENERIC_FIO_SPLIT ({filepath})")
                 return 'generic_fio_split'

@@ -33,7 +33,7 @@ def _extract_email_addr(from_header: str) -> str:
     return addr.lower()
 
 
-def decode_mime_header(header_value):
+def decode_mime_header(header_value: str | None) -> str:
     """Decode MIME encoded header (supports Russian encodings)."""
     if not header_value:
         return ""
@@ -47,7 +47,7 @@ def decode_mime_header(header_value):
     return " ".join(result)
 
 
-def _extract_monthly_pwd_from_msg(msg) -> dict | None:
+def _extract_monthly_pwd_from_msg(msg: email.message.Message) -> dict | None:
     """Extract Zetta monthly password from all text parts of an email message."""
     from zetta_handler import extract_monthly_password
     for part in msg.walk():

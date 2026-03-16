@@ -17,7 +17,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
-def _is_zetta_notification(filename: str) -> bool:
+def _is_zetta_notification(filename: str) -> bool:  # noqa: D401
     """Check if an empty file is an expected Zetta notification (change/откреплениe letter)."""
     # Zetta extracted files: 11140-X_ММXX-... or 11140_ММXX-...
     return bool(re.match(r'^11140', filename))
@@ -172,7 +172,7 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
     return msg
 
 
-def _send(smtp_cfg: dict, recipients: list[str], msg: MIMEMultipart):
+def _send(smtp_cfg: dict, recipients: list[str], msg: MIMEMultipart) -> None:
     """Send the email via SMTP."""
     server = smtp_cfg['server']
     port = smtp_cfg.get('port', 465)

@@ -21,13 +21,14 @@ import subprocess
 import urllib.request
 from datetime import datetime
 from collections import defaultdict
+from functools import lru_cache
 
 from detector import detect_format
 from parsers import PARSERS
 from writer import write_to_master, write_batch_to_master, load_existing_keys
 
 
-def setup_logging(config: dict):
+def setup_logging(config: dict) -> None:
     log_file = config.get('logging', {}).get('file', './logs/processor.log')
     log_level = config.get('logging', {}).get('level', 'INFO')
     os.makedirs(os.path.dirname(log_file) or '.', exist_ok=True)
@@ -53,36 +54,29 @@ def _expand_env(obj):
     return obj
 
 
-def load_config(path: str = 'config.yaml') -> dict:
+def load_config(path: str = 'config.yaml') -> dict:  # type: ignore[return]
     with open(path, 'r', encoding='utf-8') as f:
         return _expand_env(yaml.safe_load(f))
 
 
-def _build_skip_rules(config: dict) -> tuple[list[str], list[str]]:
-    """Precompute lowercased skip rules from config (call once at startup)."""
-    skip_subs = [s.lower() for s in config.get('skip_rules', {}).get('filename_contains', [])]
-    skip_exts = [e.lower() for e in config.get('skip_rules', {}).get('ignore_extensions', [])]
-    return skip_subs, skip_exts
-
-
-_skip_rules_cache = None
+@lru_cache(maxsize=1)
+def _build_skip_rules(skip_subs: tuple, skip_exts: tuple) -> tuple[tuple, tuple]:
+    """Precompute lowercased skip rules (cached after first call)."""
+    return (
+        tuple(s.lower() for s in skip_subs),
+        tuple(e.lower() for e in skip_exts),
+    )
 
 
 def should_skip_file(filename: str, config: dict) -> bool:
     """Check if file should be skipped based on config rules."""
-    global _skip_rules_cache
-    if _skip_rules_cache is None:
-        _skip_rules_cache = _build_skip_rules(config)
-    skip_subs, skip_exts = _skip_rules_cache
-
+    rules = config.get('skip_rules', {})
+    skip_subs, skip_exts = _build_skip_rules(
+        tuple(rules.get('filename_contains', [])),
+        tuple(rules.get('ignore_extensions', [])),
+    )
     lower = filename.lower()
-    for sub in skip_subs:
-        if sub in lower:
-            return True
-    for ext in skip_exts:
-        if lower.endswith(ext):
-            return True
-    return False
+    return any(sub in lower for sub in skip_subs) or any(lower.endswith(ext) for ext in skip_exts)
 
 
 def convert_xls_to_xlsx(filepath: str) -> str | None:
@@ -119,7 +113,7 @@ def _dedup_xls_xlsx(files: list[str]) -> list[str]:
     return list(by_stem.values())
 
 
-def _quarantine(filepath: str, config: dict):
+def _quarantine(filepath: str, config: dict) -> None:
     """Copy a problematic file to the quarantine folder for manual inspection."""
     logger = logging.getLogger(__name__)
     quarantine_dir = config.get('processing', {}).get('quarantine_folder', './quarantine')
@@ -246,7 +240,7 @@ def make_stats() -> dict:
     }
 
 
-def _ping_healthcheck(config: dict, stats: dict):
+def _ping_healthcheck(config: dict, stats: dict) -> None:
     """Ping healthchecks.io (or compatible) URL to confirm cron is alive."""
     url = config.get('healthcheck_url', '').strip()
     if not url:
@@ -433,7 +427,7 @@ def run_test_mode(folder: str, config: dict):
     print(f"{'='*70}\n")
 
 
-def _print_summary(stats: dict):
+def _print_summary(stats: dict) -> None:
     """Print processing summary to console."""
     print(f"\n{'='*50}")
     print(f"  Records:    {stats['total_records']}")
