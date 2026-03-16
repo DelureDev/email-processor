@@ -27,7 +27,15 @@ python main.py --no-dedup
 python main.py --config path/to/config.yaml
 ```
 
-No test suite exists. Use `--test` mode against sample files to verify parser behaviour.
+```bash
+# Run test suite (50 tests)
+pytest tests/ -v
+
+# Run a single test file
+pytest tests/test_utils.py -v
+```
+
+Tests in `tests/test_parsers.py` and `tests/test_detector.py` require fixture files in `test_files/` (gitignored — contains real data). Other test files are self-contained.
 
 `.xls` → `.xlsx` conversion requires LibreOffice installed (`libreoffice --headless`).
 

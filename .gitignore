@@ -26,3 +26,6 @@ Thumbs.db
 
 # Quarantine
 quarantine/
+
+# Test fixture files (contain real patient data)
+test_files/
