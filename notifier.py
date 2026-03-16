@@ -4,6 +4,8 @@ Attaches the master xlsx and includes a summary of what was processed.
 """
 import os
 import re
+import ssl
+import html
 import smtplib
 import logging
 from email.mime.multipart import MIMEMultipart
@@ -110,14 +112,14 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
         body += "<h3>По страховым компаниям:</h3><table border='1' cellpadding='5' cellspacing='0' style='border-collapse: collapse;'>"
         body += "<tr style='background: #2F5496; color: white;'><th>Компания</th><th>Записей</th></tr>"
         for company, count in sorted(by_company.items(), key=lambda x: -x[1]):
-            body += f"<tr><td>{company}</td><td align='center'>{count}</td></tr>"
+            body += f"<tr><td>{html.escape(str(company))}</td><td align='center'>{count}</td></tr>"
         body += "</table>"
 
     # Errors
     if errors:
         body += "<h3 style='color: #dc2626;'>⚠ Ошибки:</h3><ul>"
         for err in errors[:20]:
-            body += f"<li>{err}</li>"
+            body += f"<li>{html.escape(str(err))}</li>"
         body += "</ul>"
 
     # Unknown files — IMPORTANT: these need attention
@@ -126,7 +128,7 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
         body += "<p style='color: #666; font-size: 13px;'>Эти файлы не подошли ни под один известный формат. Возможно, новая страховая компания или изменённый формат.</p>"
         body += "<ul>"
         for f in unknown[:20]:
-            body += f"<li><code>{f}</code></li>"
+            body += f"<li><code>{html.escape(str(f))}</code></li>"
         body += "</ul>"
 
     # Empty files — split into Zetta notifications (expected) and real empties
@@ -138,7 +140,7 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
         if other_empty:
             body += "<h3 style='color: #a3a3a3;'>📭 Файлы без записей:</h3><ul>"
             for f in other_empty[:20]:
-                body += f"<li><code>{f}</code></li>"
+                body += f"<li><code>{html.escape(str(f))}</code></li>"
             body += "</ul>"
 
         if zetta_empty:
@@ -178,12 +180,13 @@ def _send(smtp_cfg: dict, recipients: list[str], msg: MIMEMultipart):
     username = smtp_cfg['username']
     password = smtp_cfg['password']
 
+    ctx = ssl.create_default_context()
     if use_ssl:
-        with smtplib.SMTP_SSL(server, port) as smtp:
+        with smtplib.SMTP_SSL(server, port, context=ctx) as smtp:
             smtp.login(username, password)
             smtp.send_message(msg, to_addrs=recipients)
     else:
         with smtplib.SMTP(server, port) as smtp:
-            smtp.starttls()
+            smtp.starttls(context=ctx)
             smtp.login(username, password)
             smtp.send_message(msg, to_addrs=recipients)

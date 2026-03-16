@@ -85,7 +85,7 @@ def extract_monthly_password(body: str) -> dict | None:
         if 'в период с' in line:
             found_period = True
             continue
-        if found_period and len(line) >= 4 and not line.startswith('Коммерческ') and not line.startswith('Настоящ'):
+        if found_period and 4 <= len(line) <= 30 and re.match(r'^[A-Za-z0-9!@#$%^&*()_+\-=]+$', line) and not line.startswith('Коммерческ') and not line.startswith('Настоящ'):
             password = line.strip()
             logger.info(f"Found Zetta monthly password: {len(password)} chars (valid {valid_from} - {valid_to})")
             return {

@@ -3,6 +3,8 @@ IMAP Fetcher — connects to Yandex, downloads .xlsx attachments
 """
 import imaplib
 import email
+import email.utils
+import ssl
 from email.header import decode_header
 import os
 import re
@@ -22,6 +24,12 @@ def _imap_date(dt) -> str:
     return f"{dt.day:02d}-{_IMAP_MONTHS[dt.month - 1]}-{dt.year}"
 
 
+def _extract_email_addr(from_header: str) -> str:
+    """Extract just the email address from a From header (strips display name)."""
+    _, addr = email.utils.parseaddr(from_header)
+    return addr.lower()
+
+
 def decode_mime_header(header_value):
     """Decode MIME encoded header (supports Russian encodings)."""
     if not header_value:
@@ -34,6 +42,23 @@ def decode_mime_header(header_value):
         else:
             result.append(part)
     return " ".join(result)
+
+
+def _extract_monthly_pwd_from_msg(msg) -> dict | None:
+    """Extract Zetta monthly password from all text parts of an email message."""
+    from zetta_handler import extract_monthly_password
+    for part in msg.walk():
+        ct = part.get_content_type()
+        if ct in ('text/plain', 'text/html'):
+            payload = part.get_payload(decode=True)
+            if payload is None:
+                continue
+            charset = part.get_content_charset() or 'utf-8'
+            body = payload.decode(charset, errors='replace')
+            result = extract_monthly_password(body)
+            if result:
+                return result
+    return None
 
 
 class IMAPFetcher:
@@ -65,7 +90,7 @@ class IMAPFetcher:
     def connect(self):
         """Connect to Yandex IMAP."""
         logger.info(f"Connecting to {self.server}:{self.port}...")
-        self.mail = imaplib.IMAP4_SSL(self.server, self.port)
+        self.mail = imaplib.IMAP4_SSL(self.server, self.port, ssl_context=ssl.create_default_context())
         self.mail.login(self.username, self.password)
         self.mail.select(self.folder)
         logger.info("Connected successfully")
@@ -82,8 +107,8 @@ class IMAPFetcher:
         subject = decode_mime_header(msg.get('Subject', ''))
 
         if self.allowed_senders:
-            sender_lower = sender.lower()
-            if not any(s.lower() in sender_lower for s in self.allowed_senders):
+            sender_addr = _extract_email_addr(sender)
+            if not any(s.lower() in sender_addr for s in self.allowed_senders):
                 return False
 
         if self.subject_keywords:
@@ -115,17 +140,10 @@ class IMAPFetcher:
                     if st != 'OK':
                         continue
                     msg = email.message_from_bytes(msg_data[0][1])
-                    for part in msg.walk():
-                        ct = part.get_content_type()
-                        if ct in ('text/plain', 'text/html'):
-                            payload = part.get_payload(decode=True)
-                            charset = part.get_content_charset() or 'utf-8'
-                            body = payload.decode(charset, errors='replace')
-                            monthly = extract_monthly_password(body)
-                            if monthly and monthly['password'] not in zetta_passwords:
-                                zetta_passwords.insert(0, monthly['password'])
-                                logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
-                            break
+                    monthly = _extract_monthly_pwd_from_msg(msg)
+                    if monthly and monthly['password'] not in zetta_passwords:
+                        zetta_passwords.insert(0, monthly['password'])
+                        logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
                 except Exception as e:
                     logger.debug(f"Error reading password email: {e}")
 
@@ -156,25 +174,17 @@ class IMAPFetcher:
 
             if not self._matches_filter(msg):
                 # Still check for Zetta monthly password emails even if they don't match subject filter
-                sender = decode_mime_header(msg.get('From', ''))
-                if is_zetta_monthly_password_email(sender):
-                    for part in msg.walk():
-                        ct = part.get_content_type()
-                        if ct in ('text/plain', 'text/html'):
-                            payload = part.get_payload(decode=True)
-                            charset = part.get_content_charset() or 'utf-8'
-                            body = payload.decode(charset, errors='replace')
-                            monthly = extract_monthly_password(body)
-                            if monthly and monthly['password'] not in zetta_passwords:
-                                # Insert at front — monthly passwords get priority
-                                zetta_passwords.insert(0, monthly['password'])
-                                logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
-                            break
+                sender_addr = _extract_email_addr(decode_mime_header(msg.get('From', '')))
+                if is_zetta_monthly_password_email(sender_addr):
+                    monthly = _extract_monthly_pwd_from_msg(msg)
+                    if monthly and monthly['password'] not in zetta_passwords:
+                        zetta_passwords.insert(0, monthly['password'])
+                        logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
                     self.processed_ids.add(message_id)
-                    self.processed_ids.add(msg_id_str)
                 continue
 
-            sender = decode_mime_header(msg.get('From', ''))
+            sender_raw = decode_mime_header(msg.get('From', ''))
+            sender = _extract_email_addr(sender_raw)
             subject = decode_mime_header(msg.get('Subject', ''))
             date = msg.get('Date', '')
 
@@ -182,17 +192,10 @@ class IMAPFetcher:
             if is_password_zip_email(sender):
                 # First check if it's a monthly password email
                 if is_zetta_monthly_password_email(sender):
-                    for part in msg.walk():
-                        ct = part.get_content_type()
-                        if ct in ('text/plain', 'text/html'):
-                            payload = part.get_payload(decode=True)
-                            charset = part.get_content_charset() or 'utf-8'
-                            body = payload.decode(charset, errors='replace')
-                            monthly = extract_monthly_password(body)
-                            if monthly and monthly['password'] not in zetta_passwords:
-                                zetta_passwords.insert(0, monthly['password'])
-                                logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
-                            break
+                    monthly = _extract_monthly_pwd_from_msg(msg)
+                    if monthly and monthly['password'] not in zetta_passwords:
+                        zetta_passwords.insert(0, monthly['password'])
+                        logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
                 else:
                     # Per-email password (pulse.letter or Sber)
                     for part in msg.walk():
@@ -228,6 +231,10 @@ class IMAPFetcher:
                 try:
                     payload = part.get_payload(decode=True)
                     if payload is None:
+                        continue
+                    # Reject attachments over 50 MB
+                    if len(payload) > 50 * 1024 * 1024:
+                        logger.warning(f"Attachment too large ({len(payload)} bytes), skipping: {filename}")
                         continue
                     with open(filepath, 'wb') as f:
                         f.write(payload)
