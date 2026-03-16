@@ -2,26 +2,23 @@
 
 **Current score: 7.5/10** (code review 2026-03-16)
 
-All original 41 fixes + post-fix improvements are deployed. Test suite (50 tests) is in place.
-This roadmap targets the gap from 7.5 to 9+.
-
 ---
 
-## Priority 1 — Reliability
+## Priority 1 — Reliability ✅ DONE (2026-03-16)
 
-| # | Item | Why |
-|---|------|-----|
-| 1 | IMAP retry logic (2-3 attempts on connect/fetch) | Network hiccups fail the entire run |
-| 2 | SQLite for processed IDs | `processed_ids.json` isn't atomic; concurrent runs or crashes can corrupt it |
-| 3 | Batch writes in writer.py | Opening/saving entire workbook per file slows down at 10k+ rows |
-| 4 | Pin dependency versions in requirements.txt | A pandas update could silently change parsing behavior |
+| # | Item | Status |
+|---|------|--------|
+| 1 | IMAP retry logic (3x on connect + fetch) | ✅ |
+| 2 | SQLite for processed IDs (atomic writes, auto-migrates JSON) | ✅ |
+| 3 | Batch writes in writer.py (one open/save per run) | ✅ |
+| 4 | Pin dependency version bounds in requirements.txt | ✅ |
 
 ## Priority 2 — Maintainability
 
 | # | Item | Why |
 |---|------|-----|
-| 5 | Data-driven detector.py | 15-insurer if/elif chain works now but won't scale to 30+ |
-| 6 | Add type hints to fetcher.py, notifier.py, main.py | Consistency with parsers/utils.py; helps IDE and future contributors |
+| 5 | Data-driven detector.py | 15-insurer if/elif chain won't scale to 30+ |
+| 6 | Add type hints to fetcher.py, notifier.py, main.py | Consistency; helps IDE and future contributors |
 | 7 | Replace `_skip_rules_cache` global with `functools.lru_cache` | Module-level `global` is an anti-pattern |
 
 ## Priority 3 — Nice to have
