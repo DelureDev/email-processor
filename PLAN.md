@@ -13,13 +13,13 @@
 | 3 | Batch writes in writer.py (one open/save per run) | ✅ |
 | 4 | Pin dependency version bounds in requirements.txt | ✅ |
 
-## Priority 2 — Maintainability
+## Priority 2 — Maintainability ✅ DONE (2026-03-16)
 
-| # | Item | Why |
-|---|------|-----|
-| 5 | Data-driven detector.py | 15-insurer if/elif chain won't scale to 30+ |
-| 6 | Add type hints to fetcher.py, notifier.py, main.py | Consistency; helps IDE and future contributors |
-| 7 | Replace `_skip_rules_cache` global with `functools.lru_cache` | Module-level `global` is an anti-pattern |
+| # | Item | Status |
+|---|------|--------|
+| 5 | Data-driven detector.py (`CONTENT_RULES` list, one line per insurer) | ✅ |
+| 6 | Type hints on fetcher.py, notifier.py, main.py | ✅ |
+| 7 | Replace `_skip_rules_cache` global with `functools.lru_cache` | ✅ |
 
 ## Priority 3 — Nice to have
 
