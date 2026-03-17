@@ -2,8 +2,10 @@
 Email Notifier — sends processing reports via SMTP.
 Attaches the master xlsx and includes a summary of what was processed.
 """
+import io
 import os
 import re
+import csv
 import ssl
 import html
 import smtplib
@@ -202,7 +204,28 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
             part.add_header('Content-Disposition', f'attachment; filename="{basename}"')
             msg.attach(part)
 
+    # Attach daily delta CSV
+    new_records = stats.get('new_records', [])
+    if new_records:
+        csv_bytes = _build_csv(new_records)
+        part = MIMEBase('text', 'csv')
+        part.set_payload(csv_bytes)
+        encoders.encode_base64(part)
+        date_str = datetime.now().strftime('%Y-%m-%d')
+        part.add_header('Content-Disposition', f'attachment; filename="records_{date_str}.csv"')
+        msg.attach(part)
+
     return msg
+
+
+def _build_csv(records: list[dict]) -> bytes:
+    """Build UTF-8 BOM CSV from records list."""
+    columns = ['ФИО', 'Дата рождения', '№ полиса', 'Начало обслуживания', 'Конец обслуживания', 'Страховая компания', 'Страхователь', 'Источник файла']
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=columns, extrasaction='ignore', lineterminator='\r\n')
+    writer.writeheader()
+    writer.writerows(records)
+    return '\ufeff'.encode('utf-8') + buf.getvalue().encode('utf-8')
 
 
 def _send(smtp_cfg: dict, recipients: list[str], msg: MIMEMultipart) -> None:

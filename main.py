@@ -206,6 +206,7 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
     for r in records:
         company = r.get('Страховая компания', 'Неизвестно')
         stats['by_company'][company] += 1
+        stats['new_records'].append({**r, 'Источник файла': filename})
 
     # Write (or queue for batch write)
     if not dry_run:
@@ -247,6 +248,7 @@ def make_stats() -> dict:
         'unknown_files': [],
         'skipped_files': [],
         'empty_files': [],
+        'new_records': [],
         'master_path': '',
     }
 
