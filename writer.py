@@ -2,15 +2,34 @@
 Writer — appends normalized records to master xlsx file on network drive.
 """
 import os
+import sys
 import shutil
 import pandas as pd
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from contextlib import contextmanager
 from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def _master_lock(master_path: str):
+    """Exclusive file lock around master.xlsx writes. No-op on Windows (dev only)."""
+    if sys.platform == 'win32':
+        yield
+        return
+    import fcntl
+    lock_path = master_path + '.lock'
+    with open(lock_path, 'w') as lf:
+        fcntl.flock(lf, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lf, fcntl.LOCK_UN)
+
 
 COLUMNS = ['ФИО', 'Дата рождения', '№ полиса', 'Начало обслуживания', 'Конец обслуживания', 'Страховая компания', 'Страхователь', 'Источник файла', 'Дата обработки']
 
@@ -84,15 +103,16 @@ def write_batch_to_master(batch: list[tuple[list[dict], str]], master_path: str)
         for r in records
     ]
 
-    if os.path.exists(master_path):
-        bak_path = master_path + '.bak'
-        try:
-            shutil.copy2(master_path, bak_path)
-        except OSError as e:
-            logger.warning(f"Could not create backup of master: {e}")
-        _append_to_existing(all_records, master_path)
-    else:
-        _create_new(all_records, master_path)
+    with _master_lock(master_path):
+        if os.path.exists(master_path):
+            bak_path = master_path + '.bak'
+            try:
+                shutil.copy2(master_path, bak_path)
+            except OSError as e:
+                logger.warning(f"Could not create backup of master: {e}")
+            _append_to_existing(all_records, master_path)
+        else:
+            _create_new(all_records, master_path)
 
     logger.info(f"Wrote {len(all_records)} records ({len(batch)} files) to {master_path}")
     _export_csv(master_path)
