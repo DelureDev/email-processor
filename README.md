@@ -8,9 +8,11 @@
 - **Автоопределение формата** — по отправителю или по содержимому файла
 - **Пароли ZIP** — автоизвлечение паролей Зетта (месячные + поштучные) и Сбербанк
 - **Дедупликация** — по ФИО + полис + даты обслуживания
-- **Email-отчёт** — итоги обработки отправляются коллегам
-- **Резервное копирование** — `master.xlsx.bak` создаётся перед каждой записью
+- **Email-отчёт** — итоги обработки + вложения `records_YYYY-MM-DD.xlsx` и `.csv` с новыми записями текущего запуска
+- **Экспорт на сетевой диск** — ежедневный CSV автоматически копируется в сетевую папку (CIFS/SMB) для загрузки в 1С
+- **Резервное копирование** — `master.xlsx.bak` + `master.csv` создаются после каждой записи
 - **Карантин** — файлы с ошибками парсинга сохраняются в `./quarantine/`
+- **Аудит паролей** — отдельный лог `./logs/audit.log` для операций с паролями ZIP (без значений паролей)
 - **Мониторинг** — healthcheck-пинг для контроля работы cron
 - **4 режима работы** — IMAP, локальная папка, тест, dry-run
 
@@ -107,8 +109,38 @@ email-processor/
 │   ├── energogarant.py  # Энергогарант
 │   └── generic_parser.py # Универсальный парсер
 ├── requirements.txt
-└── processed_ids.json   # Отслеживание обработанных писем
+├── logs/
+│   ├── processor.log    # Основной лог
+│   └── audit.log        # Аудит операций с паролями
+└── processed_ids.json   # Отслеживание обработанных писем (legacy, заменён SQLite)
 ```
+
+## Экспорт на сетевой диск (SMB/CIFS)
+
+Для автоматической выгрузки ежедневных CSV в сетевую папку (например, для 1С):
+
+```bash
+# Установить cifs-utils
+sudo apt install cifs-utils
+
+# Создать точку монтирования
+sudo mkdir -p /mnt/storage
+
+# Смонтировать шару
+sudo mount -t cifs //SERVER/SHARE /mnt/storage -o username=USER,password=PASS,domain=DOMAIN,iocharset=utf8
+
+# Добавить в /etc/fstab для автомонтирования
+//SERVER/SHARE /mnt/storage cifs username=USER,password=PASS,domain=DOMAIN,iocharset=utf8,uid=adminos,_netdev 0 0
+```
+
+В `config.yaml`:
+```yaml
+output:
+  master_file: "./output/master.xlsx"
+  csv_export_folder: "/mnt/storage"
+```
+
+После каждого запуска файл `records_YYYY-MM-DD.csv` появится в сетевой папке.
 
 ## Добавление новой страховой компании
 

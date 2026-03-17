@@ -96,3 +96,7 @@ All issues tracked in `PLAN.md` (Priority 1–3, 10 items) are resolved as of 20
 - **Audit log** — `main.py` configures a separate `audit` logger writing to `./logs/audit.log`. Events logged (never the actual password value): `ZETTA_MONTHLY_PASSWORD_EXTRACTED`, `PASSWORD_EXTRACTED`, `ZIP_EXTRACT`. Audit log file path can be overridden via `config.yaml` → `logging.audit_file`.
 
 - **Skipped-file breakdown in email report** — `notifier.py` now shows why files were skipped (by rule / unknown format / empty) as a breakdown on the summary line, and lists any xlsx files that hit a skip rule by name.
+
+- **Daily delta email attachments** — email report attaches `records_YYYY-MM-DD.xlsx` (styled) and `records_YYYY-MM-DD.csv` with only this run's new records. No more full master.xlsx attachment.
+
+- **Network share export** — `main.py` writes the daily delta CSV to a configured network folder after each run. Set `output.csv_export_folder` in `config.yaml` (e.g. `/mnt/storage`). Mount the share via `/etc/fstab` with CIFS credentials. `stats['new_records']` accumulates new records during the run and is consumed by both notifier and network export.
