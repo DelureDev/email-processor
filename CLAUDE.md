@@ -83,6 +83,43 @@ All parsers import from `parsers/utils.py`:
 - `assemble_fio(df, row, col_f, col_i, col_o)` — combine split FIO columns
 - `get_cell_str(df, row, col)` — safe cell-to-string with None handling
 
+## Versioning & releases
+
+This project uses **semantic versioning** (`MAJOR.MINOR.PATCH`):
+- `PATCH` (1.0.x) — bug fixes, parser tweaks, minor improvements
+- `MINOR` (1.x.0) — new insurer added, new feature
+- `MAJOR` (x.0.0) — breaking changes to schema or pipeline
+
+### After making changes, always:
+
+1. Update `__version__` in `main.py`
+2. Add an entry to `CHANGELOG.md` under the new version
+3. Commit, tag, and push:
+
+```bash
+git add -A
+git commit -m "feat/fix/refactor: description"
+git tag v1.2.3
+git push origin main
+git push origin v1.2.3
+```
+
+4. Deploy to VM:
+```bash
+# On VM:
+git pull
+```
+
+### Changelog format (`CHANGELOG.md`):
+
+```markdown
+## [1.2.3] - YYYY-MM-DD
+### Added / Fixed / Changed / Security
+- Short description of change
+```
+
+**Never skip the tag step after meaningful changes.** Patch bumps are fine for small fixes — the important thing is that every pushed change has a corresponding version so the VM always runs a known, tagged release.
+
 ## Fix history
 
 All issues tracked in `PLAN.md` (Priority 1–4, 17 items) are resolved as of 2026-03-17.
