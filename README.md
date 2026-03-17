@@ -56,7 +56,7 @@ python main.py --config path.yaml  # Альтернативный конфиг
 ```bash
 crontab -e
 # Добавить строку:
-*/30 * * * * cd /home/adminos/email-processor && /usr/bin/python3 main.py >> /dev/null 2>&1
+*/30 * * * * cd /home/user/email-processor && /usr/bin/python3 main.py >> /dev/null 2>&1
 ```
 
 Для мониторинга cron — зарегистрироваться на [healthchecks.io](https://healthchecks.io) (бесплатно), вставить URL в `config.yaml`:
@@ -130,7 +130,7 @@ sudo mkdir -p /mnt/storage
 sudo mount -t cifs //SERVER/SHARE /mnt/storage -o username=USER,password=PASS,domain=DOMAIN,iocharset=utf8
 
 # Добавить в /etc/fstab для автомонтирования
-//SERVER/SHARE /mnt/storage cifs username=USER,password=PASS,domain=DOMAIN,iocharset=utf8,uid=adminos,_netdev 0 0
+//SERVER/SHARE /mnt/storage cifs credentials=/etc/cifs-credentials,iocharset=utf8,uid=1000,_netdev 0 0
 ```
 
 В `config.yaml`:

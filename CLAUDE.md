@@ -39,14 +39,14 @@ Tests in `tests/test_parsers.py` and `tests/test_detector.py` require fixture fi
 
 `.xls` → `.xlsx` conversion requires LibreOffice installed (`libreoffice --headless`).
 
-Production VM: `adminos@n8n:~/email-processor`. Deploy via `git push` then `git pull` on VM.
+Production VM: deploy via `git push` then `git pull` on VM.
 
 ## Architecture
 
 **Pipeline flow (IMAP mode):**
 `fetcher.py` → `detector.py` → `parsers/` → `writer.py` → `notifier.py`
 
-1. **`fetcher.py` (`IMAPFetcher`)** — connects to Yandex IMAP, filters emails by subject keywords, downloads `.xlsx`/`.xls`/`.zip` attachments to `./temp/`. Tracks processed message IDs (RFC 2822 `Message-ID` only) in `processed_ids.json` (capped at 5000 entries) to avoid reprocessing. Two-pass logic: first collects all passwords from Zetta/Sber password emails, then extracts password-protected zips in a second pass.
+1. **`fetcher.py` (`IMAPFetcher`)** — connects to IMAP, filters emails by subject keywords, downloads `.xlsx`/`.xls`/`.zip` attachments to `./temp/`. Tracks processed message IDs (RFC 2822 `Message-ID` only) in SQLite (capped at 5000 entries) to avoid reprocessing. Two-pass logic: first collects all passwords from Zetta/Sber password emails, then extracts password-protected zips in a second pass.
 
 2. **`zetta_handler.py`** — all logic for password-protected ZIPs (Zetta Insurance and Sberbank). Handles two Zetta password flows: monthly passwords from `parollpu@zettains.ru` and per-email passwords from `pulse.letter@zettains.ru`. `try_passwords()` tries cp866 then utf-8 encoding for each password. Zip Slip guard validates extracted paths stay inside extraction directory.
 
@@ -85,18 +85,21 @@ All parsers import from `parsers/utils.py`:
 
 ## Fix history
 
-All issues tracked in `PLAN.md` (Priority 1–3, 10 items) are resolved as of 2026-03-17.
+All issues tracked in `PLAN.md` (Priority 1–4, 17 items) are resolved as of 2026-03-17.
 
-## Observability features (added 2026-03-17)
+## Security hardening
 
-- **Confidence scoring** — `detector.py` emits `logger.warning` for generic-fallback detections (`GENERIC_FIO`, `GENERIC_FIO_SPLIT`). Sender-based and content-rule detections remain `INFO`. Watch for "Low-confidence detection" in logs to find insurers that need a proper rule added.
+- **Credentials** — `config.yaml` uses `${IMAP_PASSWORD}` / `${SMTP_PASSWORD}` env vars. Never commit plaintext credentials.
+- **Formula injection** — `writer.py` sanitizes cell values starting with `=`, `+`, `-`, `@` to prevent xlsx formula injection.
+- **File locking** — `writer.py` acquires exclusive `fcntl` lock around master.xlsx writes (prevents data corruption from overlapping cron runs).
+- **SMTP timeout** — 30s timeout on all SMTP operations in `notifier.py`.
+- **Audit log** — separate `audit` logger writing to `./logs/audit.log`. Events: `ZETTA_MONTHLY_PASSWORD_EXTRACTED`, `PASSWORD_EXTRACTED`, `ZIP_EXTRACT`. Never logs actual password values. Override path via `config.yaml` → `logging.audit_file`.
 
-- **CSV backup** — `writer.py` exports `master.csv` (UTF-8 BOM) alongside `master.xlsx` after every successful write. No config needed.
+## Observability & output
 
-- **Audit log** — `main.py` configures a separate `audit` logger writing to `./logs/audit.log`. Events logged (never the actual password value): `ZETTA_MONTHLY_PASSWORD_EXTRACTED`, `PASSWORD_EXTRACTED`, `ZIP_EXTRACT`. Audit log file path can be overridden via `config.yaml` → `logging.audit_file`.
-
-- **Skipped-file breakdown in email report** — `notifier.py` now shows why files were skipped (by rule / unknown format / empty) as a breakdown on the summary line, and lists any xlsx files that hit a skip rule by name.
-
-- **Daily delta email attachments** — email report attaches `records_YYYY-MM-DD.xlsx` (styled) and `records_YYYY-MM-DD.csv` with only this run's new records. No more full master.xlsx attachment.
-
-- **Network share export** — `main.py` writes the daily delta CSV to a configured network folder after each run. Set `output.csv_export_folder` in `config.yaml` (e.g. `/mnt/storage`). Mount the share via `/etc/fstab` with CIFS credentials. `stats['new_records']` accumulates new records during the run and is consumed by both notifier and network export.
+- **Confidence scoring** — `detector.py` emits `logger.warning` for generic-fallback detections. Watch for "Low-confidence detection" in logs.
+- **CSV backup** — `writer.py` incrementally appends to `master.csv` (UTF-8 BOM) after every write.
+- **Dedup normalization** — dates zero-padded (`1.1.2020` → `01.01.2020`) in dedup keys for consistent matching.
+- **Skipped-file breakdown** — email report shows why files were skipped (by rule / unknown format / empty) and lists any xlsx files that hit a skip rule.
+- **Daily delta email** — attaches `records_YYYY-MM-DD.xlsx` (styled) and `.csv` with only this run's new records.
+- **Network share export** — writes daily delta CSV to a configured folder. Set `output.csv_export_folder` in `config.yaml`.
