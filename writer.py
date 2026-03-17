@@ -95,6 +95,18 @@ def write_batch_to_master(batch: list[tuple[list[dict], str]], master_path: str)
         _create_new(all_records, master_path)
 
     logger.info(f"Wrote {len(all_records)} records ({len(batch)} files) to {master_path}")
+    _export_csv(master_path)
+
+
+def _export_csv(master_path: str) -> None:
+    """Export master xlsx to a CSV file alongside it (UTF-8 with BOM for Excel compatibility)."""
+    csv_path = os.path.splitext(master_path)[0] + '.csv'
+    try:
+        df = pd.read_excel(master_path)
+        df.to_csv(csv_path, index=False, encoding='utf-8-sig')
+        logger.info(f"CSV backup exported: {csv_path}")
+    except Exception as e:
+        logger.warning(f"CSV backup failed: {e}")
 
 
 def _create_new(records: list[dict], path: str):

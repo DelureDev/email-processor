@@ -85,4 +85,14 @@ All parsers import from `parsers/utils.py`:
 
 ## Fix history
 
-All issues tracked in `PLAN.md` (41 items across 4 phases) are resolved as of 2026-03-16.
+All issues tracked in `PLAN.md` (Priority 1–3, 10 items) are resolved as of 2026-03-17.
+
+## Observability features (added 2026-03-17)
+
+- **Confidence scoring** — `detector.py` emits `logger.warning` for generic-fallback detections (`GENERIC_FIO`, `GENERIC_FIO_SPLIT`). Sender-based and content-rule detections remain `INFO`. Watch for "Low-confidence detection" in logs to find insurers that need a proper rule added.
+
+- **CSV backup** — `writer.py` exports `master.csv` (UTF-8 BOM) alongside `master.xlsx` after every successful write. No config needed.
+
+- **Audit log** — `main.py` configures a separate `audit` logger writing to `./logs/audit.log`. Events logged (never the actual password value): `ZETTA_MONTHLY_PASSWORD_EXTRACTED`, `PASSWORD_EXTRACTED`, `ZIP_EXTRACT`. Audit log file path can be overridden via `config.yaml` → `logging.audit_file`.
+
+- **Skipped-file breakdown in email report** — `notifier.py` now shows why files were skipped (by rule / unknown format / empty) as a breakdown on the summary line, and lists any xlsx files that hit a skip rule by name.

@@ -97,15 +97,15 @@ def detect_format(filepath: str, sender: str = None) -> str | None:
                 logger.info(f"Detected format: {fmt.upper()} ({filepath})")
                 return fmt
 
-        # Fallback: generic detection by column headers
+        # Fallback: generic detection by column headers (low confidence)
         for row_idx in range(min(20, len(df))):
             row_values = [str(v).lower().strip() for v in df.iloc[row_idx] if pd.notna(v)]
             row_text = ' '.join(row_values)
             if 'фио' in row_text and ('полис' in row_text or '№ полиса' in row_text):
-                logger.info(f"Detected format: GENERIC_FIO ({filepath})")
+                logger.warning(f"Low-confidence detection: GENERIC_FIO ({filepath}) — consider adding a content rule")
                 return 'generic_fio'
             if 'фамилия' in row_text and 'имя' in row_text:
-                logger.info(f"Detected format: GENERIC_FIO_SPLIT ({filepath})")
+                logger.warning(f"Low-confidence detection: GENERIC_FIO_SPLIT ({filepath}) — consider adding a content rule")
                 return 'generic_fio_split'
 
         logger.warning(f"Unknown format: {filepath}")

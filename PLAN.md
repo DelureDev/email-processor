@@ -21,10 +21,10 @@
 | 6 | Type hints on fetcher.py, notifier.py, main.py | ✅ |
 | 7 | Replace `_skip_rules_cache` global with `functools.lru_cache` | ✅ |
 
-## Priority 3 — Nice to have
+## Priority 3 — Nice to have ✅ DONE (2026-03-17)
 
-| # | Item | Why |
-|---|------|-----|
-| 8 | Parser confidence scoring in detector.py | Log low-confidence format detections for monitoring |
-| 9 | Master CSV backup (periodic export) | Human-readable safety net alongside .xlsx |
-| 10 | Audit logging of password handling | Ensure no debug mode leaks actual password values |
+| # | Item | Status |
+|---|------|--------|
+| 8 | Parser confidence scoring in detector.py | ✅ |
+| 9 | Master CSV backup (periodic export) | ✅ |
+| 10 | Audit logging of password handling | ✅ |

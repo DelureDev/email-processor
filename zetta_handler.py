@@ -19,6 +19,7 @@ import logging
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+audit_logger = logging.getLogger('audit')
 
 ZETTA_DOMAINS = ['zettains.ru']
 SBER_DOMAINS = ['sberins.ru']
@@ -88,6 +89,7 @@ def extract_monthly_password(body: str) -> dict | None:
         if found_period and 4 <= len(line) <= 30 and re.match(r'^[A-Za-z0-9!@#$%^&*()_+\-=]+$', line) and not line.startswith('Коммерческ') and not line.startswith('Настоящ'):
             password = line.strip()
             logger.info(f"Found Zetta monthly password: {len(password)} chars (valid {valid_from} - {valid_to})")
+            audit_logger.info(f"ZETTA_MONTHLY_PASSWORD_EXTRACTED len={len(password)} valid={valid_from}_{valid_to}")
             return {
                 'password': password,
                 'valid_from': valid_from,
@@ -108,6 +110,7 @@ def extract_password_from_body(body: str) -> str | None:
         password = match.group(1).strip()
         if len(password) >= 4:
             logger.info(f"Found password (zip pattern): {len(password)} chars")
+            audit_logger.info(f"PASSWORD_EXTRACTED pattern=zip len={len(password)}")
             return password
 
     # Pattern 2: "Пароль:XXXX" or "Пароль: XXXX" (Sber style)
@@ -116,6 +119,7 @@ def extract_password_from_body(body: str) -> str | None:
         password = match.group(1).strip()
         if len(password) >= 3 and 'поступит' not in password.lower() and 'от' not in password.lower():
             logger.info(f"Found password (direct pattern): {len(password)} chars")
+            audit_logger.info(f"PASSWORD_EXTRACTED pattern=direct len={len(password)}")
             return password
 
     return None
@@ -183,7 +187,9 @@ def try_passwords(zip_path: str, passwords: list[str], extract_to: str) -> list[
     for pwd in passwords:
         result = unzip_with_password(zip_path, pwd, extract_to)
         if result:
+            audit_logger.info(f"ZIP_EXTRACT zip={os.path.basename(zip_path)} passwords_tried={passwords.index(pwd)+1}/{len(passwords)} result=SUCCESS")
             return result
 
+    audit_logger.info(f"ZIP_EXTRACT zip={os.path.basename(zip_path)} passwords_tried={len(passwords)}/{len(passwords)} result=FAILED")
     logger.error(f"All passwords failed for {zip_path}")
     return []

@@ -42,6 +42,17 @@ def setup_logging(config: dict) -> None:
         ]
     )
 
+    # Audit logger — separate file for password-handling events
+    audit_log_file = config.get('logging', {}).get('audit_file', './logs/audit.log')
+    os.makedirs(os.path.dirname(audit_log_file) or '.', exist_ok=True)
+    audit_logger = logging.getLogger('audit')
+    audit_logger.setLevel(logging.INFO)
+    audit_logger.propagate = False
+    if not audit_logger.handlers:
+        handler = logging.FileHandler(audit_log_file, encoding='utf-8')
+        handler.setFormatter(logging.Formatter('%(asctime)s %(message)s'))
+        audit_logger.addHandler(handler)
+
 
 def _expand_env(obj):
     """Recursively expand ${VAR_NAME} placeholders in config values."""

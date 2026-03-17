@@ -103,8 +103,27 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
     body += f"""<p><strong>Дата:</strong> {now}</p>
 <p><strong>Новых записей:</strong> {total}</p>
 <p><strong>Файлов обработано:</strong> {stats.get('files_processed', 0)}</p>
-<p><strong>Файлов пропущено:</strong> {stats.get('files_skipped', 0)}</p>
 """
+
+    skipped_by_rule = stats.get('skipped_files', [])
+    n_unknown = len(stats.get('unknown_files', []))
+    n_empty = len(stats.get('empty_files', []))
+    n_rule = len(skipped_by_rule)
+    n_skipped_total = stats.get('files_skipped', 0)
+    if n_skipped_total > 0:
+        body += f"<p><strong>Файлов пропущено:</strong> {n_skipped_total}"
+        parts = []
+        if n_rule:
+            parts.append(f"по правилу: {n_rule}")
+        if n_unknown:
+            parts.append(f"неизвестный формат: {n_unknown}")
+        if n_empty:
+            parts.append(f"пустые: {n_empty}")
+        if parts:
+            body += f" <span style='color: #666; font-size: 13px;'>({', '.join(parts)})</span>"
+        body += "</p>"
+    else:
+        body += "<p><strong>Файлов пропущено:</strong> 0</p>"
 
     # By company breakdown
     by_company = stats.get('by_company', {})
@@ -130,6 +149,20 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
         for f in unknown[:20]:
             body += f"<li><code>{html.escape(str(f))}</code></li>"
         body += "</ul>"
+
+    # Rule-skipped files — intentional but good to have visibility
+    if skipped_by_rule:
+        xlsx_rule_skipped = [f for f in skipped_by_rule if f.lower().endswith(('.xlsx', '.xls'))]
+        other_rule_skipped = [f for f in skipped_by_rule if not f.lower().endswith(('.xlsx', '.xls'))]
+        if xlsx_rule_skipped:
+            body += "<h3 style='color: #7c3aed;'>⏭ Пропущено по правилу (xlsx):</h3>"
+            body += "<p style='color: #666; font-size: 13px;'>Эти xlsx-файлы попали под правило пропуска из конфига. Если это неожиданно — проверьте skip_rules.</p>"
+            body += "<ul>"
+            for f in xlsx_rule_skipped[:20]:
+                body += f"<li><code>{html.escape(str(f))}</code></li>"
+            body += "</ul>"
+        if other_rule_skipped:
+            body += f"<p style='color: #a3a3a3; font-size: 13px;'>⏭ Прочие пропущенные по правилу (не xlsx): {len(other_rule_skipped)} файлов</p>"
 
     # Empty files — split into Zetta notifications (expected) and real empties
     empty = stats.get('empty_files', [])
