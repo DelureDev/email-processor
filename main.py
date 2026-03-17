@@ -229,11 +229,21 @@ def _record_key(record: dict) -> tuple:
         s = str(val).strip() if val is not None else ''
         return '' if s == 'nan' or s == 'None' or s == 'NaT' else s
 
+    def norm_date(s: str) -> str:
+        """Zero-pad date: 1.1.2020 → 01.01.2020."""
+        parts = s.split('.')
+        if len(parts) == 3:
+            try:
+                return f"{int(parts[0]):02d}.{int(parts[1]):02d}.{parts[2]}"
+            except ValueError:
+                pass
+        return s
+
     return (
         clean(record.get('ФИО', '')).upper(),
         clean(record.get('№ полиса', '')),
-        clean(record.get('Начало обслуживания', '')),
-        clean(record.get('Конец обслуживания', '')),
+        norm_date(clean(record.get('Начало обслуживания', ''))),
+        norm_date(clean(record.get('Конец обслуживания', ''))),
     )
 
 

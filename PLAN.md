@@ -35,8 +35,8 @@
 |---|------|----------|--------|
 | 11 | Move credentials to env vars (`${IMAP_PASSWORD}` etc.), remove plaintext from config.yaml | CRITICAL | ✅ |
 | 12 | Add file lock around master.xlsx writes (prevent concurrent cron corruption) | CRITICAL | ✅ |
-| 13 | Sanitize xlsx cell values against formula injection (`=`, `+`, `-`, `@` prefix) | HIGH | |
-| 14 | Close workbook in finally block in writer.py (`_create_new`, `_append_to_existing`) | HIGH | |
-| 15 | Stop re-reading master for CSV backup — pass records directly to `_export_csv()` | MEDIUM | |
-| 16 | Add timeout to SMTP operations in notifier.py | MEDIUM | |
-| 17 | Normalize dates in dedup key (zero-pad `1.1.2020` → `01.01.2020`) | MEDIUM | |
+| 13 | Sanitize xlsx cell values against formula injection (`=`, `+`, `-`, `@` prefix) | HIGH | ✅ |
+| 14 | Close workbook in finally block in writer.py (`_create_new`, `_append_to_existing`) | HIGH | ✅ |
+| 15 | Stop re-reading master for CSV backup — pass records directly to `_export_csv()` | MEDIUM | ✅ |
+| 16 | Add timeout to SMTP operations in notifier.py | MEDIUM | ✅ |
+| 17 | Normalize dates in dedup key (zero-pad `1.1.2020` → `01.01.2020`) | MEDIUM | ✅ |

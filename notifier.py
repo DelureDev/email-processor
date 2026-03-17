@@ -266,11 +266,11 @@ def _send(smtp_cfg: dict, recipients: list[str], msg: MIMEMultipart) -> None:
 
     ctx = ssl.create_default_context()
     if use_ssl:
-        with smtplib.SMTP_SSL(server, port, context=ctx) as smtp:
+        with smtplib.SMTP_SSL(server, port, context=ctx, timeout=30) as smtp:
             smtp.login(username, password)
             smtp.send_message(msg, to_addrs=recipients)
     else:
-        with smtplib.SMTP(server, port) as smtp:
+        with smtplib.SMTP(server, port, timeout=30) as smtp:
             smtp.starttls(context=ctx)
             smtp.login(username, password)
             smtp.send_message(msg, to_addrs=recipients)

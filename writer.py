@@ -47,9 +47,20 @@ def load_existing_keys(master_path: str) -> set:
             s = str(s).strip()
             return '' if s in ('nan', 'None', 'NaT') else s
 
+        def _norm_date(s: str) -> str:
+            parts = s.split('.')
+            if len(parts) == 3:
+                try:
+                    return f"{int(parts[0]):02d}.{int(parts[1]):02d}.{parts[2]}"
+                except ValueError:
+                    pass
+            return s
+
         for col in dedup_cols:
             df[col] = df[col].map(_clean)
         df['ФИО'] = df['ФИО'].str.upper()
+        for col in ['Начало обслуживания', 'Конец обслуживания']:
+            df[col] = df[col].map(_norm_date)
 
         keys = set(zip(df['ФИО'], df['№ полиса'], df['Начало обслуживания'], df['Конец обслуживания']))
     except Exception as e:
@@ -115,72 +126,91 @@ def write_batch_to_master(batch: list[tuple[list[dict], str]], master_path: str)
             _create_new(all_records, master_path)
 
     logger.info(f"Wrote {len(all_records)} records ({len(batch)} files) to {master_path}")
-    _export_csv(master_path)
+    _export_csv(master_path, all_records)
 
 
-def _export_csv(master_path: str) -> None:
-    """Export master xlsx to a CSV file alongside it (UTF-8 with BOM for Excel compatibility)."""
+def _export_csv(master_path: str, new_records: list[dict]) -> None:
+    """Append new records to master CSV alongside master.xlsx (UTF-8 BOM, incremental)."""
+    import csv as csv_mod
     csv_path = os.path.splitext(master_path)[0] + '.csv'
     try:
-        df = pd.read_excel(master_path)
-        df.to_csv(csv_path, index=False, encoding='utf-8-sig')
-        logger.info(f"CSV backup exported: {csv_path}")
+        write_header = not os.path.exists(csv_path)
+        with open(csv_path, 'a', newline='', encoding='utf-8-sig') as f:
+            writer = csv_mod.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore')
+            if write_header:
+                writer.writeheader()
+            writer.writerows(new_records)
+        logger.info(f"CSV backup updated: {csv_path} (+{len(new_records)} rows)")
     except Exception as e:
         logger.warning(f"CSV backup failed: {e}")
 
 
+def _safe(value) -> object:
+    """Prevent formula injection by prefixing formula-like strings with apostrophe."""
+    if value is None:
+        return ''
+    s = str(value)
+    return ("'" + s) if s and s[0] in ('=', '+', '-', '@', '\t', '\r') else value
+
+
 def _create_new(records: list[dict], path: str):
     wb = Workbook()
-    ws = wb.active
-    ws.title = "Данные"
+    try:
+        ws = wb.active
+        ws.title = "Данные"
 
-    # Header
-    for col_idx, col_name in enumerate(COLUMNS, 1):
-        cell = ws.cell(row=1, column=col_idx, value=col_name)
-        cell.font = HEADER_FONT
-        cell.fill = HEADER_FILL
-        cell.alignment = HEADER_ALIGNMENT
-        cell.border = THIN_BORDER
-        ws.column_dimensions[get_column_letter(col_idx)].width = COLUMN_WIDTHS.get(col_name, 20)
-
-    ws.row_dimensions[1].height = 30
-    ws.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNS))}1"
-
-    # Data
-    for row_idx, record in enumerate(records, 2):
+        # Header
         for col_idx, col_name in enumerate(COLUMNS, 1):
-            cell = ws.cell(row=row_idx, column=col_idx, value=record.get(col_name, ''))
-            cell.font = DATA_FONT
+            cell = ws.cell(row=1, column=col_idx, value=col_name)
+            cell.font = HEADER_FONT
+            cell.fill = HEADER_FILL
+            cell.alignment = HEADER_ALIGNMENT
             cell.border = THIN_BORDER
-            cell.alignment = DATA_ALIGNMENT
+            ws.column_dimensions[get_column_letter(col_idx)].width = COLUMN_WIDTHS.get(col_name, 20)
 
-    # Freeze header
-    ws.freeze_panes = 'A2'
+        ws.row_dimensions[1].height = 30
+        ws.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNS))}1"
 
-    wb.save(path)
+        # Data
+        for row_idx, record in enumerate(records, 2):
+            for col_idx, col_name in enumerate(COLUMNS, 1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=_safe(record.get(col_name, '')))
+                cell.font = DATA_FONT
+                cell.border = THIN_BORDER
+                cell.alignment = DATA_ALIGNMENT
+
+        # Freeze header
+        ws.freeze_panes = 'A2'
+
+        wb.save(path)
+    finally:
+        wb.close()
 
 
 def _append_to_existing(records: list[dict], path: str):
     wb = load_workbook(path)
-    if 'Данные' not in wb.sheetnames:
-        raise ValueError(f"Sheet 'Данные' not found in {path}. Available sheets: {wb.sheetnames}")
-    ws = wb['Данные']
+    try:
+        if 'Данные' not in wb.sheetnames:
+            raise ValueError(f"Sheet 'Данные' not found in {path}. Available sheets: {wb.sheetnames}")
+        ws = wb['Данные']
 
-    # Find actual last data row (max_row may include empty styled rows)
-    next_row = ws.max_row + 1
-    for r in range(ws.max_row, 0, -1):
-        if any(ws.cell(row=r, column=c).value is not None for c in range(1, len(COLUMNS) + 1)):
-            next_row = r + 1
-            break
+        # Find actual last data row (max_row may include empty styled rows)
+        next_row = ws.max_row + 1
+        for r in range(ws.max_row, 0, -1):
+            if any(ws.cell(row=r, column=c).value is not None for c in range(1, len(COLUMNS) + 1)):
+                next_row = r + 1
+                break
 
-    for row_idx, record in enumerate(records, next_row):
-        for col_idx, col_name in enumerate(COLUMNS, 1):
-            cell = ws.cell(row=row_idx, column=col_idx, value=record.get(col_name, ''))
-            cell.font = DATA_FONT
-            cell.border = THIN_BORDER
-            cell.alignment = DATA_ALIGNMENT
+        for row_idx, record in enumerate(records, next_row):
+            for col_idx, col_name in enumerate(COLUMNS, 1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=_safe(record.get(col_name, '')))
+                cell.font = DATA_FONT
+                cell.border = THIN_BORDER
+                cell.alignment = DATA_ALIGNMENT
 
-    # Update autofilter range
-    ws.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNS))}{ws.max_row}"
+        # Update autofilter range
+        ws.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNS))}{ws.max_row}"
 
-    wb.save(path)
+        wb.save(path)
+    finally:
+        wb.close()
