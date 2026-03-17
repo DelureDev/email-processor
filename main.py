@@ -253,6 +253,23 @@ def make_stats() -> dict:
     }
 
 
+def _export_to_network(config: dict, stats: dict) -> None:
+    """Write daily delta CSV to network folder if configured."""
+    folder = config.get('output', {}).get('csv_export_folder', '').strip()
+    if not folder or not stats.get('new_records'):
+        return
+    logger = logging.getLogger(__name__)
+    from notifier import _build_csv
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    dest = os.path.join(folder, f'records_{date_str}.csv')
+    try:
+        with open(dest, 'wb') as f:
+            f.write(_build_csv(stats['new_records']))
+        logger.info(f"Exported {len(stats['new_records'])} records to {dest}")
+    except Exception as e:
+        logger.error(f"Failed to export CSV to network: {e}")
+
+
 def _ping_healthcheck(config: dict, stats: dict) -> None:
     """Ping healthchecks.io (or compatible) URL to confirm cron is alive."""
     url = config.get('healthcheck_url', '').strip()
@@ -332,8 +349,8 @@ def run_imap_mode(config: dict, dry_run: bool = False):
 
     _print_summary(stats)
 
-    # Send email report
     if not dry_run:
+        _export_to_network(config, stats)
         from notifier import send_report
         send_report(config, stats)
 
@@ -372,6 +389,7 @@ def run_local_mode(folder: str, config: dict, dry_run: bool = False):
     _print_summary(stats)
 
     if not dry_run:
+        _export_to_network(config, stats)
         from notifier import send_report
         send_report(config, stats)
 
