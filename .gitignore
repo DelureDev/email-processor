@@ -8,8 +8,10 @@ venv/
 # Project runtime files
 temp/
 logs/*.log
-output/*.xlsx
+output/
 processed_ids.json
+processed_ids.json.bak
+diagnostic_report.json
 
 # Config with credentials — use config.example.yaml as template
 config.yaml
