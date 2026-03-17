@@ -15,6 +15,9 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from datetime import datetime
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 logger = logging.getLogger(__name__)
 
@@ -188,34 +191,59 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
     if dupes > 0:
         body += f"<p style='color: #666; font-size: 13px;'>Дубликатов отфильтровано: {dupes}</p>"
 
-    body += "<p style='color: gray; font-size: 12px;'>Мастер-файл во вложении.</p>"
+    new_records = stats.get('new_records', [])
+    if new_records:
+        body += f"<p style='color: gray; font-size: 12px;'>Новые записи во вложении ({len(new_records)} шт.).</p>"
     body += "</body></html>"
 
     msg.attach(MIMEText(body, 'html', 'utf-8'))
 
-    # Attach master xlsx
-    master_path = stats.get('master_path', '')
-    if master_path and os.path.exists(master_path):
-        with open(master_path, 'rb') as f:
-            part = MIMEBase('application', 'vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-            part.set_payload(f.read())
-            encoders.encode_base64(part)
-            basename = os.path.basename(master_path)
-            part.add_header('Content-Disposition', f'attachment; filename="{basename}"')
-            msg.attach(part)
-
-    # Attach daily delta CSV
-    new_records = stats.get('new_records', [])
+    # Attach daily delta as xlsx + csv
     if new_records:
+        date_str = datetime.now().strftime('%Y-%m-%d')
+
+        xlsx_bytes = _build_xlsx(new_records)
+        part = MIMEBase('application', 'vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        part.set_payload(xlsx_bytes)
+        encoders.encode_base64(part)
+        part.add_header('Content-Disposition', f'attachment; filename="records_{date_str}.xlsx"')
+        msg.attach(part)
+
         csv_bytes = _build_csv(new_records)
         part = MIMEBase('text', 'csv')
         part.set_payload(csv_bytes)
         encoders.encode_base64(part)
-        date_str = datetime.now().strftime('%Y-%m-%d')
         part.add_header('Content-Disposition', f'attachment; filename="records_{date_str}.csv"')
         msg.attach(part)
 
     return msg
+
+
+def _build_xlsx(records: list[dict]) -> bytes:
+    """Build styled xlsx from records list, returns bytes."""
+    from writer import COLUMNS, HEADER_FONT, HEADER_FILL, HEADER_ALIGNMENT, DATA_FONT, DATA_ALIGNMENT, THIN_BORDER, COLUMN_WIDTHS
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Данные"
+    for col_idx, col_name in enumerate(COLUMNS, 1):
+        cell = ws.cell(row=1, column=col_idx, value=col_name)
+        cell.font = HEADER_FONT
+        cell.fill = HEADER_FILL
+        cell.alignment = HEADER_ALIGNMENT
+        cell.border = THIN_BORDER
+        ws.column_dimensions[get_column_letter(col_idx)].width = COLUMN_WIDTHS.get(col_name, 20)
+    ws.row_dimensions[1].height = 30
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNS))}1"
+    for row_idx, record in enumerate(records, 2):
+        for col_idx, col_name in enumerate(COLUMNS, 1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=record.get(col_name, ''))
+            cell.font = DATA_FONT
+            cell.border = THIN_BORDER
+            cell.alignment = DATA_ALIGNMENT
+    ws.freeze_panes = 'A2'
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
 
 
 def _build_csv(records: list[dict]) -> bytes:
