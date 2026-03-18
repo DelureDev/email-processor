@@ -495,12 +495,15 @@ def run_local_mode(folder: str, config: dict, dry_run: bool = False):
 
 def run_test_mode(folder: str, config: dict):
     """Test mode: parse files and show results, don't write anything."""
+    import sys, io
+    if sys.stdout.encoding and sys.stdout.encoding.lower().replace('-', '') != 'utf8':
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     logger = logging.getLogger(__name__)
     files = _dedup_xls_xlsx(
         glob.glob(os.path.join(folder, '*.xlsx')) + glob.glob(os.path.join(folder, '*.xls'))
     )
     print(f"\n{'='*70}")
-    print(f"TEST MODE — {len(files)} files found")
+    print(f"TEST MODE - {len(files)} files found")
     print(f"{'='*70}\n")
 
     total = 0
@@ -508,51 +511,51 @@ def run_test_mode(folder: str, config: dict):
         filename = os.path.basename(filepath)
 
         if should_skip_file(filename, config):
-            print(f"⏭  SKIP: {filename}")
+            print(f"[SKIP] {filename}")
             continue
 
         if filepath.lower().endswith('.xls'):
             converted = convert_xls_to_xlsx(filepath)
             if converted is None:
-                print(f"❌ CONVERT FAILED: {filename}")
+                print(f"[ERR]  CONVERT FAILED: {filename}")
                 continue
             filepath = converted
 
         fmt = detect_format(filepath)
         if fmt is None:
-            print(f"❌ UNKNOWN: {filename}")
+            print(f"[ERR]  UNKNOWN: {filename}")
             continue
 
         parser_fn = PARSERS.get(fmt)
         if not parser_fn:
-            print(f"❌ NO PARSER ({fmt}): {filename}")
+            print(f"[ERR]  NO PARSER ({fmt}): {filename}")
             continue
 
         try:
             records = parser_fn(filepath)
         except Exception as e:
-            print(f"❌ ERROR: {filename} — {e}")
+            print(f"[ERR]  ERROR: {filename} -- {e}")
             continue
 
         if not records:
-            print(f"⚠  EMPTY: {filename} (format: {fmt})")
+            print(f"[---]  EMPTY: {filename} (format: {fmt})")
             continue
 
         clinic, need_comment = detect_clinic(filepath)
         comment = extract_policy_comment(filepath) if need_comment else ''
         total += len(records)
-        print(f"✅ {fmt.upper():12s} | {len(records):3d} records | {filename} | 🏥 {clinic}")
+        print(f"[OK]  {fmt.upper():12s} | {len(records):3d} records | {filename} | clinic: {clinic}")
         if comment:
-            print(f"   💬 {comment[:80]}")
+            print(f"   comment: {comment[:80]}")
         elif need_comment:
-            print(f"   💬 ⚠ комментарий не найден (extract_comment=true, но ничего не извлечено)")
+            print(f"   comment: (!) ne najden (extract_comment=true)")
         for r in records[:3]:  # show first 3
             fio = (r.get('ФИО') or '')[:35]
             polis = (r.get('№ полиса') or '')[:20]
             start = r.get('Начало обслуживания') or ''
             end = r.get('Конец обслуживания') or ''
             company = r.get('Страховая компания') or ''
-            print(f"   → {fio:35s} | {polis:20s} | {start:10s}-{end:10s} | {company}")
+            print(f"   > {fio:35s} | {polis:20s} | {start:10s}-{end:10s} | {company}")
         if len(records) > 3:
             print(f"   ... and {len(records) - 3} more")
 
