@@ -44,9 +44,9 @@ Production VM: deploy via `git push` then `git pull` on VM.
 ## Architecture
 
 **Pipeline flow (IMAP mode):**
-`fetcher.py` → `detector.py` → `parsers/` → `writer.py` → `notifier.py`
+`fetcher.py` → `detector.py` → `parsers/` → `clinic_matcher.py` → `writer.py` → `notifier.py`
 
-1. **`fetcher.py` (`IMAPFetcher`)** — connects to IMAP, filters emails by subject keywords, downloads `.xlsx`/`.xls`/`.zip` attachments to `./temp/`. Tracks processed message IDs (RFC 2822 `Message-ID` only) in SQLite (capped at 5000 entries) to avoid reprocessing. Two-pass logic: first collects all passwords from Zetta/Sber password emails, then extracts password-protected zips in a second pass.
+1. **`fetcher.py` (`IMAPFetcher`)** — connects to IMAP, filters emails by subject keywords, downloads `.xlsx`/`.xls`/`.zip` attachments to `./temp/`. Tracks processed message IDs (RFC 2822 `Message-ID` only) in SQLite (capped at 5000 entries) to avoid reprocessing. Two-pass logic: first collects all passwords from Zetta/Sber password emails, then extracts password-protected zips in a second pass. After processing, moves emails that produced new records to the configured folder (`imap.processed_folder`, e.g. `"Обработанные"`) via COPY + DELETE + EXPUNGE.
 
 2. **`zetta_handler.py`** — all logic for password-protected ZIPs (Zetta Insurance and Sberbank). Handles two Zetta password flows: monthly passwords from `parollpu@zettains.ru` and per-email passwords from `pulse.letter@zettains.ru`. `try_passwords()` tries cp866 then utf-8 encoding for each password. Zip Slip guard validates extracted paths stay inside extraction directory.
 
@@ -55,11 +55,15 @@ Production VM: deploy via `git push` then `git pull` on VM.
    - Stage 2: content-based — reads first 25 rows, matches Russian keyword patterns (`'ресо-гарантия'`, `'югория'`, etc.)
    - Fallback: generic detection by column header patterns (`generic_fio`, `generic_fio_split`)
 
-4. **`parsers/`** — one `.py` file per insurer, each exports a `parse(filepath) -> list[dict]` function. Registered in `parsers/__init__.py` as the `PARSERS` dict mapping format name → function. All parsers return records with the canonical 7-field schema: `ФИО`, `Дата рождения`, `№ полиса`, `Начало обслуживания`, `Конец обслуживания`, `Страховая компания`, `Страхователь`. (`Источник файла` and `Дата обработки` are added by `writer.py`.)
+4. **`parsers/`** — one `.py` file per insurer, each exports a `parse(filepath) -> list[dict]` function. Registered in `parsers/__init__.py` as the `PARSERS` dict mapping format name → function. All parsers return records with the canonical 7-field schema: `ФИО`, `Дата рождения`, `№ полиса`, `Начало обслуживания`, `Конец обслуживания`, `Страховая компания`, `Страхователь`. (`Клиника`, `Комментарий в полис`, `Источник файла`, `Дата обработки` are added by `main.py`/`writer.py`.)
 
-5. **`writer.py`** — appends records to `master.xlsx` (openpyxl). Creates styled file with header row if it doesn't exist; appends to existing. `load_existing_keys()` uses vectorized pandas ops with `usecols=` to load only the 4 dedup columns.
+5. **`clinic_matcher.py`** — runs once per file after parsing. `detect_clinic(filepath)` returns `(clinic_name, extract_comment)`. Scans the entire xlsx content as lowercased text against `clinics.yaml` keywords (longest-first to prevent partial matches). No match → `"⚠️ Не определено"`. If `extract_comment=True`, `extract_policy_comment(filepath)` is also called — two strategies: (1) scan rows 0-19 for known column headers (`_COMMENT_COLUMNS`), take first non-empty data cell below; (2) scan all rows for free-text cells >20 chars containing program description keywords.
 
-6. **`main.py`** — CLI entry point. Deduplication key is `(ФИО.upper(), № полиса, Начало обслуживания, Конец обслуживания)`. The `stats` dict is passed by reference through the pipeline and populated by `process_file()`.
+6. **`clinics.yaml`** — configurable clinic lookup table. Each entry has `name`, `keywords` list, and optional `extract_comment: true` flag. Keywords sorted longest-first automatically at load time. Add new clinics here without touching Python code.
+
+7. **`writer.py`** — appends records to `master.xlsx` (openpyxl). Creates styled file with header row if it doesn't exist; appends to existing. `load_existing_keys()` uses vectorized pandas ops with `usecols=` to load the 5 dedup columns (backward-compat fallback for master files without `Клиника` column). Also incrementally appends to `master.csv` (UTF-8 BOM, semicolon delimiter) after every write.
+
+8. **`main.py`** — CLI entry point. Deduplication key is `(ФИО.upper().replace('Ё','Е'), № полиса, Начало обслуживания, Конец обслуживания, Клиника)`. The `stats` dict is passed by reference through the pipeline and populated by `process_file()`. On last day of month, `_attach_monthly_if_last_day()` filters master.xlsx for current-month records and attaches as xlsx to the email report.
 
 ## Adding a new insurer
 
@@ -71,7 +75,12 @@ Production VM: deploy via `git push` then `git pull` on VM.
 
 ## Configuration
 
-`config.yaml` holds IMAP/SMTP credentials, output path, skip rules, and dedup settings. **Never commit credentials** — load from env vars or keep `config.yaml` in `.gitignore`. The `skip_rules.filename_contains` list skips files whose names contain specific substrings (e.g. `_all.` for aggregate files). `processed_ids.json` persists processed message IDs across runs.
+`config.yaml` holds IMAP/SMTP credentials, output path, skip rules, and dedup settings. **Never commit credentials** — load from env vars or keep `config.yaml` in `.gitignore`. The `skip_rules.filename_contains` list skips files whose names contain specific substrings (e.g. `_all.` for aggregate files). Processed message IDs are tracked in SQLite (`processed_ids.db`).
+
+Key config options added since v1.0:
+- `imap.processed_folder` — folder name to move processed emails into (e.g. `"Обработанные"`)
+- `output.csv_export_folder` — network share path for daily + monthly CSV export
+- `clinics.yaml` — separate file, not inside `config.yaml`
 
 ## Shared parser utilities
 
@@ -122,7 +131,7 @@ git pull
 
 ## Fix history
 
-All issues tracked in `PLAN.md` (Priority 1–4, 17 items) are resolved as of 2026-03-17.
+All planned work complete as of 2026-03-18. See `PLAN.md` for full version history and `CHANGELOG.md` for per-version details. Current version: **v1.5.0**.
 
 ## Security hardening
 
@@ -138,5 +147,9 @@ All issues tracked in `PLAN.md` (Priority 1–4, 17 items) are resolved as of 20
 - **CSV backup** — `writer.py` incrementally appends to `master.csv` (UTF-8 BOM) after every write.
 - **Dedup normalization** — dates zero-padded (`1.1.2020` → `01.01.2020`) in dedup keys for consistent matching.
 - **Skipped-file breakdown** — email report shows why files were skipped (by rule / unknown format / empty) and lists any xlsx files that hit a skip rule.
-- **Daily delta email** — attaches `records_YYYY-MM-DD.xlsx` (styled) and `.csv` with only this run's new records.
-- **Network share export** — writes daily delta CSV to a configured folder. Set `output.csv_export_folder` in `config.yaml`.
+- **Daily delta email** — attaches `records_YYYY-MM-DD.xlsx` (styled) with only this run's new records. No CSV in email — available on network share instead.
+- **Monthly master email** — on last day of month, email also attaches `master_YYYY-MM.xlsx` with all records for the current month.
+- **Network share export** — writes daily delta CSV and monthly `master_YYYY-MM.csv` to configured folder. Set `output.csv_export_folder` in `config.yaml`.
+- **`ё` → `е` normalization** — applied in both dedup key (`main.py`) and `load_existing_keys()` (`writer.py`) to prevent false duplicates.
+- **Clinic column** — `Клиника` populated for every record; `"⚠️ Не определено"` if no keyword match. Part of dedup key.
+- **Policy comment** — `Комментарий в полис` extracted only when clinic has `extract_comment: true` in `clinics.yaml`.
