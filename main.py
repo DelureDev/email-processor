@@ -28,6 +28,7 @@ from functools import lru_cache
 from detector import detect_format
 from parsers import PARSERS
 from writer import write_to_master, write_batch_to_master, load_existing_keys
+from clinic_matcher import detect_clinic
 
 
 def setup_logging(config: dict) -> None:
@@ -202,6 +203,10 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
     if not records:
         logger.info(f"All records already in master: {filename}")
         return 0
+
+    # Detect clinic (once per file) and inject into all records
+    clinic = detect_clinic(filepath)
+    records = [{**r, 'Клиника': clinic} for r in records]
 
     # Track stats
     stats['files_processed'] += 1
