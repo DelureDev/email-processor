@@ -248,7 +248,7 @@ def _build_xlsx(records: list[dict]) -> bytes:
 
 def _build_csv(records: list[dict]) -> bytes:
     """Build UTF-8 BOM CSV from records list."""
-    columns = ['ФИО', 'Дата рождения', '№ полиса', 'Начало обслуживания', 'Конец обслуживания', 'Страховая компания', 'Страхователь', 'Источник файла']
+    columns = ['ФИО', 'Дата рождения', '№ полиса', 'Начало обслуживания', 'Конец обслуживания', 'Страховая компания', 'Страхователь', 'Источник файла', 'Дата обработки']
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=columns, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
     writer.writeheader()
