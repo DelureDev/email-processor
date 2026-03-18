@@ -380,16 +380,21 @@ def run_imap_mode(config: dict, dry_run: bool = False):
 
     fetcher = IMAPFetcher(config, dry_run=dry_run)
     pending = []
+    processed_imap_ids = []
     try:
         fetcher.connect()
         days_back = config.get('imap', {}).get('days_back', 7)
         attachments = fetcher.fetch_attachments(days_back=days_back)
 
+        processed_imap_ids = []
         for att in attachments:
+            records_before = stats['total_records']
             process_file(att['filepath'], master_path, config, stats,
                         sender=att.get('sender', ''),
                         existing_keys=existing_keys, dry_run=dry_run,
                         pending=pending)
+            if stats['total_records'] > records_before and att.get('imap_id'):
+                processed_imap_ids.append(att['imap_id'])
             try:
                 os.remove(att['filepath'])
             except OSError:
@@ -411,6 +416,10 @@ def run_imap_mode(config: dict, dry_run: bool = False):
         logger.error(f"IMAP error: {e}", exc_info=True)
         stats['errors'].append(f"IMAP error: {e}")
     finally:
+        if not dry_run:
+            dest = config.get('imap', {}).get('processed_folder', '').strip()
+            if dest and processed_imap_ids:
+                fetcher.move_to_folder(processed_imap_ids, dest)
         fetcher.disconnect()
 
     if pending and not dry_run:

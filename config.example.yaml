@@ -11,6 +11,7 @@ imap:
   username: "your-bot@yourdomain.ru"
   password: "${IMAP_PASSWORD}"        # set env var, or paste password directly
   folder: "INBOX"
+  processed_folder: "Обработанные"     # move successfully parsed emails here (leave empty to disable)
   days_back: 3                        # How many days back to scan
   subject_keywords:
     - "открепл"

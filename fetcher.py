@@ -157,6 +157,27 @@ class IMAPFetcher:
         except Exception:
             pass
 
+    def move_to_folder(self, imap_ids: list[str], dest_folder: str) -> None:
+        """Move emails (by IMAP sequence number) to dest_folder. Uses COPY + DELETE + EXPUNGE."""
+        if not imap_ids or not dest_folder:
+            return
+        unique_ids = list(dict.fromkeys(imap_ids))  # deduplicate, preserve order
+        id_set = ','.join(unique_ids)
+        try:
+            # Try RFC 6851 MOVE first (more efficient)
+            status, _ = self.mail.uid('MOVE', id_set, dest_folder) if False else ('NO', None)
+            if status != 'OK':
+                # Fallback: COPY + STORE \Deleted + EXPUNGE
+                status, _ = self.mail.copy(id_set, dest_folder)
+                if status == 'OK':
+                    self.mail.store(id_set, '+FLAGS', '\\Deleted')
+                    self.mail.expunge()
+                    logger.info(f"Moved {len(unique_ids)} emails to '{dest_folder}'")
+                else:
+                    logger.warning(f"Failed to copy emails to '{dest_folder}': {status}")
+        except Exception as e:
+            logger.error(f"Error moving emails to '{dest_folder}': {e}")
+
     def _matches_filter(self, msg) -> bool:
         """Check if email matches sender/subject filters."""
         sender = decode_mime_header(msg.get('From', ''))
@@ -320,6 +341,7 @@ class IMAPFetcher:
                         'subject': subject,
                         'date': date,
                         'message_id': message_id,
+                        'imap_id': msg_id_str,
                     }))
                     logger.info(f"Downloaded Zetta zip: {filename}")
 
@@ -332,6 +354,7 @@ class IMAPFetcher:
                         'subject': subject,
                         'date': date,
                         'message_id': message_id,
+                        'imap_id': msg_id_str,
                     })
 
             # Mark as processed (Message-ID only — IMAP sequence numbers are not stable)
@@ -351,6 +374,7 @@ class IMAPFetcher:
                         'subject': info['subject'],
                         'date': info['date'],
                         'message_id': info['message_id'],
+                        'imap_id': info['imap_id'],
                         '_extract_dir': extract_dir,
                     })
                 # Clean up zip
