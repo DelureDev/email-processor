@@ -167,7 +167,13 @@ class IMAPFetcher:
             status, _ = self.mail.uid('COPY', uid_set, dest_folder)
             if status == 'OK':
                 self.mail.uid('STORE', uid_set, '+FLAGS', '\\Deleted')
-                self.mail.expunge()
+                # Use UID EXPUNGE (RFC 4315) to only expunge our UIDs,
+                # not other messages flagged \Deleted by other clients.
+                # Falls back to plain EXPUNGE if server doesn't support it.
+                try:
+                    self.mail.uid('EXPUNGE', uid_set)
+                except Exception:
+                    self.mail.expunge()
                 logger.info(f"Moved {len(unique_uids)} emails to '{dest_folder}'")
             else:
                 logger.warning(f"Failed to copy emails to '{dest_folder}': {status}")
@@ -240,6 +246,7 @@ class IMAPFetcher:
 
         # First pass: collect all attachments and passwords
         for uid in msg_uids:
+          try:
             msg_id_str = uid.decode()
 
             msg_data = None
@@ -252,6 +259,11 @@ class IMAPFetcher:
                 time.sleep(2)
             if msg_data is None:
                 logger.error(f"Skipping message {msg_id_str} after 3 failed fetch attempts")
+                continue
+
+            # Guard against malformed FETCH response
+            if not msg_data or not isinstance(msg_data[0], tuple) or len(msg_data[0]) < 2:
+                logger.error(f"Malformed FETCH response for UID {msg_id_str}, skipping")
                 continue
 
             msg = email.message_from_bytes(msg_data[0][1])
@@ -362,6 +374,8 @@ class IMAPFetcher:
             # Mark as seen in memory — zip emails marked after extraction, not here
             if message_id not in zetta_zip_message_ids:
                 self.processed_ids.add(message_id)
+          except Exception as e:
+            logger.error(f"Error processing UID {uid}: {e}", exc_info=True)
 
         # Second pass: extract Zetta zips using collected passwords
         if zetta_zips and zetta_passwords:

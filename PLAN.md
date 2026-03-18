@@ -1,6 +1,6 @@
 # Project Status
 
-Current version: **v1.6.3**
+Current version: **v1.7.0**
 
 ---
 
@@ -65,6 +65,44 @@ Current version: **v1.6.3**
 | 21 | `notifier.py:278` | `_build_csv()` is dead code | ✅ v1.6.3 |
 | 22 | `parsers/*` | Inconsistent FIO casing — 6 parsers uppercase, 10 don't | ✅ v1.6.3 |
 | 23 | `CLAUDE.md` | Says v1.5.0, code is v1.5.1 | ✅ v1.6.3 |
+
+---
+
+## Code review findings v2 (2026-03-19)
+
+### Medium
+
+| # | File | Issue | Status |
+|---|------|-------|--------|
+| 24 | `main.py:197 vs 212` | Dedup runs before clinic injection — cross-run dedup broken, duplicates accumulate | ✅ v1.7.0 |
+| 25 | `main.py:332,346` | Network share CSV `_export_to_network()` missing `_safe()` — formula injection | ✅ v1.7.0 |
+| 26 | `main.py:299-301` | Monthly report `str.contains()` is substring match — use `str.endswith()` | ✅ v1.7.0 |
+| 27 | `fetcher.py:242-364` | No per-email try/except in main fetch loop — one exception loses all results | ✅ v1.7.0 |
+| 28 | `fetcher.py:222,257` | No guard on IMAP FETCH response shape — `msg_data[0][1]` crash on malformed | ✅ v1.7.0 |
+| 29 | `fetcher.py:160-175` | `EXPUNGE` removes all `\Deleted` messages, not just ours | ✅ v1.7.0 |
+| 30 | `clinic_matcher.py:53,111` | `pd.ExcelFile` not closed — file handle leak on Windows | ✅ v1.7.0 |
+| 31 | `main.py:393,399` | `processed_imap_ids` initialized twice — shadowed variable | ✅ v1.7.0 |
+| 32 | `zetta_handler.py:149-182` | Can't distinguish wrong password from correct-password-but-no-xlsx | ✅ v1.7.0 |
+| 33 | `alfa.py:26-64` | Hardcoded column defaults; no fail-safe when header not found | ✅ v1.7.0 |
+
+### Low
+
+| # | File | Issue | Status |
+|---|------|-------|--------|
+| 34 | `writer.py:171` | `_safe()` prefixes legitimate negative numbers with apostrophe | ⬜ |
+| 35 | `writer.py:155`, `main.py:328,342` | `utf-8-sig` append inserts BOM mid-file | ⬜ |
+| 36 | `writer.py:124-141` | `.bak` never cleaned up after success | ⬜ |
+| 37 | `notifier.py:253-274` | `_build_xlsx()` never calls `wb.close()` | ⬜ |
+| 38 | `fetcher.py:13` | Unused `import json` (one-time migration only) | ⬜ |
+| 39 | `fetcher.py:121-123` | `_save_processed_ids` re-inserts full set every call | ⬜ |
+| 40 | `fetcher.py:207-271` | Pre-scan password emails never marked processed | ⬜ |
+| 41 | `zetta_handler.py:150-165` | No decompressed size limit on zip entries (zip bomb) | ⬜ |
+| 42 | `fetcher.py:320` | Filename sanitization missing null bytes / control chars | ⬜ |
+| 43 | `utils.py:20` | `format_date()` missing `DD.MM.YYYY HH:MM:SS` format | ⬜ |
+| 44 | `utils.py:88` | `get_cell_str()` returns `"123456.0"` for integer cells | ⬜ |
+| 45 | Multiple parsers | Inconsistent `dtype=str` usage (6 of 16) | ⬜ |
+| 46 | absolut, reso, vsk, zetta, euroins, renins | No error log when FIO column not found | ⬜ |
+| 47 | `main.py:382,459` | No graceful error if `config['output']['master_file']` missing | ⬜ |
 
 ---
 

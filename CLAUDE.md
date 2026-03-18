@@ -131,7 +131,7 @@ git pull
 
 ## Fix history
 
-See `PLAN.md` for full version history and `CHANGELOG.md` for per-version details. Current version: **v1.6.3**.
+See `PLAN.md` for full version history and `CHANGELOG.md` for per-version details. Current version: **v1.7.0**.
 
 ## Security hardening
 

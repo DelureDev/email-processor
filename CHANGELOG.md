@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.7.0] - 2026-03-19
+### Fixed (Medium — code review v2)
+- **Cross-run dedup broken (#24)**: clinic detection now runs BEFORE the dedup filter in `process_file()` — previously `Клиника` was always empty in the dedup key for incoming records, so duplicates were never detected against the master
+- **Network share formula injection (#25)**: `_export_to_network()` now applies `_safe()` to all CSV cell values (daily delta + monthly master)
+- **Monthly report month filter (#26)**: changed `str.contains()` to `str.endswith()` for precise month matching — prevents false matches on malformed dates
+- **Per-email error handling (#27)**: main fetch loop now wrapped in per-email try/except — one malformed email no longer aborts the entire run and loses all collected results
+- **IMAP FETCH response guard (#28)**: structural check on `msg_data` shape before indexing — prevents crash on malformed/expunged responses
+- **UID EXPUNGE (#29)**: `move_to_folder()` now uses `UID EXPUNGE` (RFC 4315) to only expunge our UIDs, with fallback to plain EXPUNGE
+- **File handle leak (#30)**: `_file_to_text()` and `extract_policy_comment()` in `clinic_matcher.py` now use `with pd.ExcelFile()` — prevents file handle leaks on Windows
+- **Shadowed variable (#31)**: removed duplicate `processed_imap_ids = []` initialization in `run_imap_mode()`
+- **Zetta no-xlsx detection (#32)**: `try_passwords()` now checks if zip contains xlsx files before trying passwords — prevents infinite retry on zips with no xlsx content
+- **Alfa header fail-safe (#33)**: `alfa.py` now returns `[]` with error log when header row is not found, instead of silently parsing with hardcoded column indices
+
 ## [1.6.3] - 2026-03-19
 ### Changed / Fixed (Low)
 - **FIO casing**: all 10 parsers that weren't uppercasing FIO now do — consistent `UPPERCASE` in master.xlsx across all 15 parsers

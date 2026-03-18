@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.6.3"
+__version__ = "1.7.0"
 
 import os
 import re
@@ -191,7 +191,20 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
         stats['empty_files'].append(filename)
         return 0
 
-    # Deduplicate against existing master
+    # Detect clinic (once per file) and inject into all records BEFORE dedup,
+    # because Клиника is part of the dedup key.
+    clinic, need_comment = detect_clinic(filepath)
+    comment = ''
+    if need_comment:
+        comment = extract_policy_comment(filepath)
+    records = [{**r, 'Клиника': clinic, 'Комментарий в полис': comment} for r in records]
+
+    if clinic == '⚠️ Не определено':
+        stats['unmatched_clinics'].append(filename)
+    if need_comment and not comment:
+        stats['missing_comments'].append(filename)
+
+    # Deduplicate against existing master (after clinic injection so keys match)
     if config.get('processing', {}).get('deduplicate', True) and existing_keys is not None:
         original_count = len(records)
         records = [r for r in records if _record_key(r) not in existing_keys]
@@ -203,18 +216,6 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
     if not records:
         logger.info(f"All records already in master: {filename}")
         return 0
-
-    # Detect clinic (once per file) and inject into all records
-    clinic, need_comment = detect_clinic(filepath)
-    comment = ''
-    if need_comment:
-        comment = extract_policy_comment(filepath)
-    records = [{**r, 'Клиника': clinic, 'Комментарий в полис': comment} for r in records]
-
-    if clinic == '⚠️ Не определено':
-        stats['unmatched_clinics'].append(filename)
-    if need_comment and not comment:
-        stats['missing_comments'].append(filename)
 
     # Track stats
     stats['files_processed'] += 1
@@ -296,9 +297,9 @@ def _attach_monthly_if_last_day(config: dict, stats: dict) -> None:
     try:
         import pandas as pd
         df = pd.read_excel(master_path, dtype=str).fillna('')
-        month_prefix = today.strftime('%m.%Y')  # matches DD.MM.YYYY format
+        month_suffix = today.strftime('%m.%Y')  # matches end of DD.MM.YYYY format
         if 'Дата обработки' in df.columns:
-            mask = df['Дата обработки'].str.contains(month_prefix, na=False)
+            mask = df['Дата обработки'].str.endswith(month_suffix, na=False)
             monthly = df[mask].to_dict('records')
         else:
             monthly = df.to_dict('records')
@@ -315,7 +316,7 @@ def _export_to_network(config: dict, stats: dict) -> None:
         return
     logger = logging.getLogger(__name__)
     import csv as csv_mod
-    from writer import COLUMNS
+    from writer import COLUMNS, _safe
 
     now = datetime.now()
     records = stats['new_records']
@@ -329,7 +330,8 @@ def _export_to_network(config: dict, stats: dict) -> None:
             w = csv_mod.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
             if write_header:
                 w.writeheader()
-            w.writerows(records)
+            for record in records:
+                w.writerow({k: _safe(v) for k, v in record.items()})
         logger.info(f"Exported daily delta ({len(records)} records) to {daily_dest}")
     except Exception as e:
         logger.error(f"Failed to export daily CSV to network: {e}")
@@ -343,7 +345,8 @@ def _export_to_network(config: dict, stats: dict) -> None:
             w = csv_mod.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
             if write_header:
                 w.writeheader()
-            w.writerows(records)
+            for record in records:
+                w.writerow({k: _safe(v) for k, v in record.items()})
         logger.info(f"Appended {len(records)} records to monthly master {monthly_dest}")
     except Exception as e:
         logger.error(f"Failed to export monthly CSV to network: {e}")
@@ -396,7 +399,6 @@ def run_imap_mode(config: dict, dry_run: bool = False):
         days_back = config.get('imap', {}).get('days_back', 7)
         attachments = fetcher.fetch_attachments(days_back=days_back)
 
-        processed_imap_ids = []
         for att in attachments:
             records_before = stats['total_records']
             process_file(att['filepath'], master_path, config, stats,

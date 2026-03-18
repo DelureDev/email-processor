@@ -50,11 +50,11 @@ def _load_clinics(config_path: str = 'clinics.yaml') -> list[dict]:
 def _file_to_text(filepath: str) -> str:
     """Read entire xlsx/xls into a single lowercased string for keyword scanning."""
     try:
-        xl = pd.ExcelFile(filepath)
-        parts = []
-        for sheet in xl.sheet_names:
-            df = pd.read_excel(xl, sheet_name=sheet, header=None, dtype=str)
-            parts.append(df.fillna('').to_string())
+        with pd.ExcelFile(filepath) as xl:
+            parts = []
+            for sheet in xl.sheet_names:
+                df = pd.read_excel(xl, sheet_name=sheet, header=None, dtype=str)
+                parts.append(df.fillna('').to_string())
         return ' '.join(parts).lower()
     except Exception as e:
         logger.warning(f"clinic_matcher: could not read {filepath}: {e}")
@@ -108,31 +108,30 @@ def extract_policy_comment(filepath: str) -> str:
     Returns empty string if nothing found.
     """
     try:
-        xl = pd.ExcelFile(filepath)
-        for sheet in xl.sheet_names:
-            df = pd.read_excel(xl, sheet_name=sheet, header=None, dtype=str).fillna('')
+        with pd.ExcelFile(filepath) as xl:
+            for sheet in xl.sheet_names:
+                df = pd.read_excel(xl, sheet_name=sheet, header=None, dtype=str).fillna('')
 
-            # Strategy 1: known column headers
-            for row_idx in range(min(20, len(df))):
-                row = [str(v).strip().lower() for v in df.iloc[row_idx]]
-                for col_kw in _COMMENT_COLUMNS:
-                    for col_idx, cell in enumerate(row):
-                        if col_kw in cell and len(cell) < _MAX_HEADER_LEN:  # skip long cells — they're data not headers
-                            # Found the column — scan down for first non-empty data value
-                            for data_row in range(row_idx + 1, min(row_idx + 5, len(df))):
-                                val = str(df.iloc[data_row, col_idx]).strip()
-                                if val and val.lower() not in ('nan', ''):
-                                    logger.debug(f"Comment found via column '{col_kw}': {val[:60]}")
-                                    return val
+                # Strategy 1: known column headers
+                for row_idx in range(min(20, len(df))):
+                    row = [str(v).strip().lower() for v in df.iloc[row_idx]]
+                    for col_kw in _COMMENT_COLUMNS:
+                        for col_idx, cell in enumerate(row):
+                            if col_kw in cell and len(cell) < _MAX_HEADER_LEN:
+                                for data_row in range(row_idx + 1, min(row_idx + 5, len(df))):
+                                    val = str(df.iloc[data_row, col_idx]).strip()
+                                    if val and val.lower() not in ('nan', ''):
+                                        logger.debug(f"Comment found via column '{col_kw}': {val[:60]}")
+                                        return val
 
-            # Strategy 2: free-text row scan
-            for row_idx in range(len(df)):
-                for col_idx in range(len(df.columns)):
-                    cell = str(df.iloc[row_idx, col_idx]).strip()
-                    cell_lower = cell.lower()
-                    if len(cell) > 20 and any(kw in cell_lower for kw in _COMMENT_ROW_KEYWORDS):
-                        logger.debug(f"Comment found via free-text row {row_idx}: {cell[:60]}")
-                        return cell
+                # Strategy 2: free-text row scan
+                for row_idx in range(len(df)):
+                    for col_idx in range(len(df.columns)):
+                        cell = str(df.iloc[row_idx, col_idx]).strip()
+                        cell_lower = cell.lower()
+                        if len(cell) > 20 and any(kw in cell_lower for kw in _COMMENT_ROW_KEYWORDS):
+                            logger.debug(f"Comment found via free-text row {row_idx}: {cell[:60]}")
+                            return cell
 
     except Exception as e:
         logger.warning(f"extract_policy_comment: could not read {filepath}: {e}")

@@ -32,10 +32,12 @@ def parse(filepath: str) -> list[dict]:
     col_end = 7
 
     # Try to find header row and map columns
+    header_found = False
     for hi in range(min(30, len(df))):
         row_values = [str(v).strip().lower() for v in df.iloc[hi] if pd.notna(v)]
         row_text = ' '.join(row_values)
         if 'фио' in row_text and 'полис' in row_text:
+            header_found = True
             for ci in range(len(df.columns)):
                 val = df.iloc[hi, ci]
                 if pd.isna(val):
@@ -62,6 +64,10 @@ def parse(filepath: str) -> list[dict]:
                         elif sh == 'по':
                             col_end = ci
             break
+
+    if not header_found:
+        logger.error(f"ALFA: Could not find header row in {filepath}")
+        return []
 
     # Find all data rows by looking for rows where col_num is a number
     for i in range(len(df)):

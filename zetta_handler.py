@@ -184,6 +184,18 @@ def unzip_with_password(zip_path: str, password: str, extract_to: str) -> list[s
 
 def try_passwords(zip_path: str, passwords: list[str], extract_to: str) -> list[str]:
     """Try multiple passwords against a zip file. Returns extracted xlsx paths."""
+    # Check if zip contains any xlsx/xls files at all
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            has_xlsx = any(n.lower().endswith(('.xlsx', '.xls')) for n in zf.namelist())
+        if not has_xlsx:
+            logger.warning(f"Zip {os.path.basename(zip_path)} contains no xlsx/xls files — skipping password attempts")
+            audit_logger.info(f"ZIP_EXTRACT zip={os.path.basename(zip_path)} result=NO_XLSX")
+            return []
+    except Exception as e:
+        logger.error(f"Cannot read zip {zip_path}: {e}")
+        return []
+
     for pwd in passwords:
         result = unzip_with_password(zip_path, pwd, extract_to)
         if result:
