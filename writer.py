@@ -136,7 +136,7 @@ def _export_csv(master_path: str, new_records: list[dict]) -> None:
     try:
         write_header = not os.path.exists(csv_path)
         with open(csv_path, 'a', newline='', encoding='utf-8-sig') as f:
-            writer = csv_mod.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore')
+            writer = csv_mod.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore', delimiter=';')
             if write_header:
                 writer.writeheader()
             writer.writerows(new_records)

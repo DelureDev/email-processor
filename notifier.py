@@ -250,7 +250,7 @@ def _build_csv(records: list[dict]) -> bytes:
     """Build UTF-8 BOM CSV from records list."""
     columns = ['ФИО', 'Дата рождения', '№ полиса', 'Начало обслуживания', 'Конец обслуживания', 'Страховая компания', 'Страхователь', 'Источник файла']
     buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=columns, extrasaction='ignore', lineterminator='\r\n')
+    writer = csv.DictWriter(buf, fieldnames=columns, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
     writer.writeheader()
     writer.writerows(records)
     return '\ufeff'.encode('utf-8') + buf.getvalue().encode('utf-8')
