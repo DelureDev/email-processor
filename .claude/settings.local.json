@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(git rm:*)",
+      "Bash(cd:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(pip install:*)",
+      "Bash(py:*)",
+      "Bash(git:*)",
+      "Bash(find:*)",
+      "Bash(wc:*)",
+      "Bash(where python:*)",
+      "Bash(C:/Python313/python.exe --version)",
+      "Bash(C:/Python312/python.exe --version)",
+      "Bash(C:/Python311/python.exe --version)",
+      "Bash(xargs grep:*)",
+      "Bash(xargs -0 grep -l \"nzgwqdufoobicxcw\\\\|fantasyclinic\\\\|sikachev\\\\|10\\\\.10\\\\.\\(10|88\\)\")",
+      "Bash(pip show:*)"
+    ]
+  }
+}

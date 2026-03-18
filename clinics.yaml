@@ -1,0 +1,42 @@
+# Clinic lookup table — Справочник подразделений
+#
+# For each clinic, list all keyword variations that insurance companies
+# use to refer to it in their xlsx files. Matching is case-insensitive.
+#
+# Format:
+#   - name: "Название клиники"  ← this goes into the Клиника column
+#     keywords:
+#       - "Как страховая пишет название"
+#       - "Другой вариант написания"
+
+clinics:
+  - name: "Молодогвардейская"
+    keywords:
+      - "Детский госпиталь"
+
+  - name: "Гарибальди 15"
+    keywords:
+      - "Детская стоматология №2"
+
+  - name: "Проспект мира"
+    keywords:
+      - "Детская стоматология"
+
+  - name: "Ленинградка"
+    keywords:
+      - "Стоматология для детей и взрослых"
+
+  - name: "Фрунзенская"
+    keywords:
+      - "Клиника Фэнтези"
+
+  - name: "Брянская"
+    keywords:
+      - "Детская клиника"      
+
+
+  # Добавь остальные клиники по этому шаблону:
+  # - name: "Название клиники"
+  #   keywords:
+  #     - "ключевое слово 1"
+  #     - "ключевое слово 2"

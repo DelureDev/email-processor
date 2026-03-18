@@ -1,42 +1,62 @@
-# Improvement Roadmap — email-processor
+# Clinic Detection — Implementation Plan
 
-**Current score: 8/10** (code review 2026-03-17)
+**Feature:** Automatically determine which clinic (Подразделение) each record belongs to, based on a configurable keyword lookup table (`clinics.yaml`), and add a `Клиника` column to all outputs.
 
 ---
 
-## Priority 1 — Reliability ✅ DONE (2026-03-16)
+## Step 1 — Schema & config
 
-| # | Item | Status |
+| # | Task | Status |
 |---|------|--------|
-| 1 | IMAP retry logic (3x on connect + fetch) | ✅ |
-| 2 | SQLite for processed IDs (atomic writes, auto-migrates JSON) | ✅ |
-| 3 | Batch writes in writer.py (one open/save per run) | ✅ |
-| 4 | Pin dependency version bounds in requirements.txt | ✅ |
+| 1.1 | Create `clinics.yaml` with keyword → clinic name mapping (user fills in real data) | ⬜ |
+| 1.2 | Add `Клиника` to `COLUMNS` in `writer.py` (after `Страхователь`, before `Источник файла`) | ⬜ |
+| 1.3 | Add `COLUMN_WIDTHS` entry for `Клиника` in `writer.py` | ⬜ |
 
-## Priority 2 — Maintainability ✅ DONE (2026-03-16)
+## Step 2 — Clinic matcher module
 
-| # | Item | Status |
+| # | Task | Status |
 |---|------|--------|
-| 5 | Data-driven detector.py (`CONTENT_RULES` list, one line per insurer) | ✅ |
-| 6 | Type hints on fetcher.py, notifier.py, main.py | ✅ |
-| 7 | Replace `_skip_rules_cache` global with `functools.lru_cache` | ✅ |
+| 2.1 | Create `clinic_matcher.py` — loads `clinics.yaml`, exposes `detect_clinic(filepath) -> str` | ⬜ |
+| 2.2 | `detect_clinic()` reads entire xlsx/xls into text, searches for keywords (case-insensitive) | ⬜ |
+| 2.3 | First keyword match wins → return clinic name. No match → return `"⚠️ Не определено"` | ⬜ |
+| 2.4 | Log warning when no clinic matched for a file | ⬜ |
 
-## Priority 3 — Nice to have ✅ DONE (2026-03-17)
+## Step 3 — Integrate into pipeline
 
-| # | Item | Status |
+| # | Task | Status |
 |---|------|--------|
-| 8 | Parser confidence scoring in detector.py | ✅ |
-| 9 | Master CSV backup (periodic export) | ✅ |
-| 10 | Audit logging of password handling | ✅ |
+| 3.1 | In `main.py` `process_file()`: call `detect_clinic()` after parsing, inject `Клиника` into each record | ⬜ |
+| 3.2 | Clinic detection runs once per file (file-level, not per-row) | ⬜ |
+| 3.3 | `--test` mode: show detected clinic in console output | ⬜ |
 
-## Priority 4 — Security & robustness (code review 2026-03-17)
+## Step 4 — Outputs
 
-| # | Item | Severity | Status |
-|---|------|----------|--------|
-| 11 | Move credentials to env vars (`${IMAP_PASSWORD}` etc.), remove plaintext from config.yaml | CRITICAL | ✅ |
-| 12 | Add file lock around master.xlsx writes (prevent concurrent cron corruption) | CRITICAL | ✅ |
-| 13 | Sanitize xlsx cell values against formula injection (`=`, `+`, `-`, `@` prefix) | HIGH | ✅ |
-| 14 | Close workbook in finally block in writer.py (`_create_new`, `_append_to_existing`) | HIGH | ✅ |
-| 15 | Stop re-reading master for CSV backup — pass records directly to `_export_csv()` | MEDIUM | ✅ |
-| 16 | Add timeout to SMTP operations in notifier.py | MEDIUM | ✅ |
-| 17 | Normalize dates in dedup key (zero-pad `1.1.2020` → `01.01.2020`) | MEDIUM | ✅ |
+| # | Task | Status |
+|---|------|--------|
+| 4.1 | `master.xlsx` — new column appears automatically (COLUMNS updated in step 1) | ⬜ |
+| 4.2 | `master.csv` — same, follows COLUMNS | ⬜ |
+| 4.3 | Email attachment xlsx/csv — same, follows COLUMNS | ⬜ |
+| 4.4 | Network share daily + monthly CSV — same, follows COLUMNS | ⬜ |
+| 4.5 | Email report body — include clinic in stats breakdown if relevant | ⬜ |
+
+## Step 5 — Testing & docs
+
+| # | Task | Status |
+|---|------|--------|
+| 5.1 | Add tests for `clinic_matcher.py` (match, no-match, case-insensitive, multiple keywords) | ⬜ |
+| 5.2 | Test with `--test` on real files from `test_files/` to verify detection | ⬜ |
+| 5.3 | Update `CLAUDE.md` — document clinic detection and `clinics.yaml` format | ⬜ |
+| 5.4 | Update `README.md` — mention clinic column in schema table | ⬜ |
+
+---
+
+## Design decisions
+
+- **Lookup, not parsing** — we don't rely on each insurer's file structure. Scan full file text for known keywords → works uniformly across all 15 formats.
+- **File-level** — one clinic per file. If multiple keywords match, first match wins.
+- **Config-driven** — `clinics.yaml` can be updated without code changes. Adding a new clinic = 1 yaml entry.
+- **No match = visible warning** — `"⚠️ Не определено"` in the column + log warning. Nothing slips through silently.
+
+## Blockers
+
+- [ ] **User to fill `clinics.yaml`** with real clinic names and all keyword variations used by insurers
