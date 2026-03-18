@@ -1,8 +1,11 @@
 """
 Shared parser utilities — eliminates duplication across all parsers.
 """
+import logging
 import pandas as pd
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 def format_date(val) -> str | None:
@@ -19,6 +22,7 @@ def format_date(val) -> str | None:
             return datetime.strptime(s, fmt).strftime('%d.%m.%Y')
         except ValueError:
             continue
+    logger.warning(f"format_date: unrecognized date format {s!r}, returning as-is")
     return s
 
 

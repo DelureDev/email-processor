@@ -122,11 +122,23 @@ def write_batch_to_master(batch: list[tuple[list[dict], str]], master_path: str)
     with _master_lock(master_path):
         if os.path.exists(master_path):
             bak_path = master_path + '.bak'
+            bak_created = False
             try:
                 shutil.copy2(master_path, bak_path)
+                bak_created = True
             except OSError as e:
                 logger.warning(f"Could not create backup of master: {e}")
-            _append_to_existing(all_records, master_path)
+            try:
+                _append_to_existing(all_records, master_path)
+            except Exception as e:
+                logger.error(f"Write to master failed: {e}")
+                if bak_created:
+                    try:
+                        shutil.copy2(bak_path, master_path)
+                        logger.warning(f"Restored master from backup after write failure")
+                    except OSError as restore_err:
+                        logger.error(f"Restore from backup also failed: {restore_err}")
+                raise
         else:
             _create_new(all_records, master_path)
 

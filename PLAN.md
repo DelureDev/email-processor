@@ -42,14 +42,14 @@ Current version: **v1.5.1**
 | # | File | Issue | Status |
 |---|------|-------|--------|
 | 5 | `fetcher.py:295` | Missing `payload is None` check in password extraction — crash on malformed email | ✅ v1.6.0 |
-| 6 | `fetcher.py:361,385` | Failed Zetta zips permanently marked processed — never retried | ⬜ |
-| 7 | `main.py + fetcher.py` | Multi-file Zetta zip cleanup deletes files before they're processed | ⬜ |
+| 6 | `fetcher.py:361,385` | Failed Zetta zips permanently marked processed — never retried | ✅ v1.6.2 |
+| 7 | `main.py + fetcher.py` | Multi-file Zetta zip cleanup deletes files before they're processed | ✅ v1.6.2 |
 | 8 | `writer.py:137` | `_export_csv()` doesn't apply `_safe()` — CSV formula injection | ✅ v1.6.1 |
 | 9 | `notifier.py:268` | `_build_xlsx()` email attachment skips `_safe()` — formula injection | ✅ v1.6.1 |
-| 10 | `writer.py:123` | `.bak` created but never auto-restored on write failure | ⬜ |
+| 10 | `writer.py:123` | `.bak` created but never auto-restored on write failure | ✅ v1.6.2 |
 | 11 | `parsers/*` | No per-row try/except — one bad cell crashes entire parser | ✅ v1.6.1 |
-| 12 | `parsers/utils.py:22` | `format_date()` silently returns unparseable strings — no warning | ⬜ |
-| 13 | `main.py:326` | Daily CSV export overwrites silently on re-runs | ⬜ |
+| 12 | `parsers/utils.py:22` | `format_date()` silently returns unparseable strings — no warning | ✅ v1.6.2 |
+| 13 | `main.py:326` | Daily CSV export overwrites silently on re-runs | ✅ v1.6.2 |
 | 14 | `tests/test_writer.py` | Test assertions use 4-tuples vs 5-tuple keys — broken after Клиника added | ✅ v1.6.0 |
 
 ### Low — nice to have

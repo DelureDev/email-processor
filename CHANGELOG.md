@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.2] - 2026-03-19
+### Fixed (Medium)
+- **Zetta zip retry**: Zetta zip `message_id` no longer marked processed when extraction fails — failed zips will be retried on the next run (`fetcher.py`)
+- **Multi-file zip cleanup**: `_extract_dir` now only set on the last result item from each zip, preventing premature directory deletion while other files from the same zip are still pending (`fetcher.py`)
+- **Master backup restore**: `write_batch_to_master()` now catches `_append_to_existing()` failures and auto-restores `master.xlsx` from `.bak` before re-raising (`writer.py`)
+- **`format_date()` silent fallback**: logs a `WARNING` when a date string matches no known format and is returned as-is (`parsers/utils.py`)
+- **Daily network CSV append**: `_export_to_network()` daily delta file now appends across runs in the same day instead of silently overwriting (`main.py`)
+
 ## [1.6.1] - 2026-03-19
 ### Fixed (Medium)
 - **Per-row try/except in all parsers**: all 15 parser data loops now catch per-row exceptions and skip bad rows with a warning instead of aborting the entire file — `alfa.py`, `kaplife.py` (both loops), `generic_parser.py` added; 13 parsers were already done in v1.6.0

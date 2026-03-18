@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.6.1"
+__version__ = "1.6.2"
 
 import os
 import re
@@ -321,17 +321,16 @@ def _export_to_network(config: dict, stats: dict) -> None:
     now = datetime.now()
     records = stats['new_records']
 
-    # 1. Daily delta — overwrite each run (same as before)
+    # 1. Daily delta — append across runs within the same day
     date_str = now.strftime('%Y-%m-%d')
     daily_dest = os.path.join(folder, f'records_{date_str}.csv')
     try:
-        rows = ['\ufeff'.encode('utf-8')]
-        buf = __import__('io').StringIO()
-        w = csv_mod.DictWriter(buf, fieldnames=COLUMNS, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
-        w.writeheader()
-        w.writerows(records)
-        with open(daily_dest, 'wb') as f:
-            f.write('\ufeff'.encode('utf-8') + buf.getvalue().encode('utf-8'))
+        write_header = not os.path.exists(daily_dest)
+        with open(daily_dest, 'a', newline='', encoding='utf-8-sig') as f:
+            w = csv_mod.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
+            if write_header:
+                w.writeheader()
+            w.writerows(records)
         logger.info(f"Exported daily delta ({len(records)} records) to {daily_dest}")
     except Exception as e:
         logger.error(f"Failed to export daily CSV to network: {e}")

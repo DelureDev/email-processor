@@ -200,8 +200,9 @@ class IMAPFetcher:
         from zetta_handler import is_zetta_email, is_sber_email, is_password_zip_email, is_zetta_monthly_password_email, extract_password_from_body, extract_password_from_html, extract_monthly_password, try_passwords
 
         results = []
-        zetta_zips = []       # [(filepath, message_info), ...]
-        zetta_passwords = []  # passwords found in Zetta emails (monthly first, then per-email)
+        zetta_zips = []             # [(filepath, message_info), ...]
+        zetta_passwords = []        # passwords found in Zetta emails (monthly first, then per-email)
+        zetta_zip_message_ids = set()  # message_ids for zip emails — marked processed only after extraction
 
         # Pre-scan: search for Zetta monthly password (go back 35 days to catch 1st-of-month email)
         pwd_since = _imap_date(datetime.now() - timedelta(days=35))
@@ -335,6 +336,7 @@ class IMAPFetcher:
 
                 if filename.lower().endswith('.zip') and is_password_zip_email(sender):
                     # Password-protected zip (Zetta or Sber) — save for second pass
+                    zetta_zip_message_ids.add(message_id)
                     zetta_zips.append((filepath, {
                         'filename': filename,
                         'sender': sender,
@@ -357,8 +359,9 @@ class IMAPFetcher:
                         'imap_id': msg_id_str,
                     })
 
-            # Mark as seen in memory — persisted to SQLite by caller after successful processing
-            self.processed_ids.add(message_id)
+            # Mark as seen in memory — zip emails marked after extraction, not here
+            if message_id not in zetta_zip_message_ids:
+                self.processed_ids.add(message_id)
 
         # Second pass: extract Zetta zips using collected passwords
         if zetta_zips and zetta_passwords:
@@ -366,17 +369,25 @@ class IMAPFetcher:
             for zip_path, info in zetta_zips:
                 extract_dir = tempfile.mkdtemp(dir=self.temp_folder, prefix='zetta_')
                 xlsx_files = try_passwords(zip_path, zetta_passwords, extract_dir)
-                for xlsx_path in xlsx_files:
-                    results.append({
-                        'filepath': xlsx_path,
-                        'filename': os.path.basename(xlsx_path),
-                        'sender': info['sender'],
-                        'subject': info['subject'],
-                        'date': info['date'],
-                        'message_id': info['message_id'],
-                        'imap_id': info['imap_id'],
-                        '_extract_dir': extract_dir,
-                    })
+                if xlsx_files:
+                    # Mark zip email as processed only on successful extraction
+                    self.processed_ids.add(info['message_id'])
+                    for i, xlsx_path in enumerate(xlsx_files):
+                        # Attach _extract_dir only to the last file so cleanup
+                        # in main.py doesn't delete the dir while other files
+                        # from the same zip haven't been processed yet
+                        results.append({
+                            'filepath': xlsx_path,
+                            'filename': os.path.basename(xlsx_path),
+                            'sender': info['sender'],
+                            'subject': info['subject'],
+                            'date': info['date'],
+                            'message_id': info['message_id'],
+                            'imap_id': info['imap_id'],
+                            '_extract_dir': extract_dir if i == len(xlsx_files) - 1 else None,
+                        })
+                else:
+                    logger.warning(f"Failed to extract zip {info['filename']} — will retry next run")
                 # Clean up zip
                 try:
                     os.remove(zip_path)
