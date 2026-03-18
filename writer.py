@@ -58,7 +58,7 @@ def load_existing_keys(master_path: str) -> set:
 
         for col in dedup_cols:
             df[col] = df[col].map(_clean)
-        df['ФИО'] = df['ФИО'].str.upper()
+        df['ФИО'] = df['ФИО'].str.upper().str.replace('Ё', 'Е', regex=False)
         for col in ['Начало обслуживания', 'Конец обслуживания']:
             df[col] = df[col].map(_norm_date)
 

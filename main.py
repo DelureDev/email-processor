@@ -247,7 +247,7 @@ def _record_key(record: dict) -> tuple:
         return s
 
     return (
-        clean(record.get('ФИО', '')).upper(),
+        clean(record.get('ФИО', '')).upper().replace('Ё', 'Е'),
         clean(record.get('№ полиса', '')),
         norm_date(clean(record.get('Начало обслуживания', ''))),
         norm_date(clean(record.get('Конец обслуживания', ''))),
