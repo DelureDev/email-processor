@@ -213,7 +213,7 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
     for r in records:
         company = r.get('Страховая компания', 'Неизвестно')
         stats['by_company'][company] += 1
-        stats['new_records'].append({**r, 'Источник файла': filename, 'Дата обработки': datetime.now().strftime('%d.%m.%Y %H:%M')})
+        stats['new_records'].append({**r, 'Источник файла': filename, 'Дата обработки': datetime.now().strftime('%d.%m.%Y')})
 
     # Write (or queue for batch write)
     if not dry_run:

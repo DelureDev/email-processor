@@ -108,7 +108,7 @@ def write_batch_to_master(batch: list[tuple[list[dict], str]], master_path: str)
 
     os.makedirs(os.path.dirname(master_path) or '.', exist_ok=True)
 
-    now = datetime.now().strftime('%d.%m.%Y %H:%M')
+    now = datetime.now().strftime('%d.%m.%Y')
     all_records = [
         {**r, 'Источник файла': source_filename, 'Дата обработки': now}
         for records, source_filename in batch
