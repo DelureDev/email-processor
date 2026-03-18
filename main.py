@@ -483,8 +483,9 @@ def run_test_mode(folder: str, config: dict):
             print(f"⚠  EMPTY: {filename} (format: {fmt})")
             continue
 
+        clinic = detect_clinic(filepath)
         total += len(records)
-        print(f"✅ {fmt.upper():12s} | {len(records):3d} records | {filename}")
+        print(f"✅ {fmt.upper():12s} | {len(records):3d} records | {filename} | 🏥 {clinic}")
         for r in records[:3]:  # show first 3
             fio = (r.get('ФИО') or '')[:35]
             polis = (r.get('№ полиса') or '')[:20]
