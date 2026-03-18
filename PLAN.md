@@ -1,6 +1,6 @@
 # Project Status
 
-Current version: **v1.7.0**
+Current version: **v1.7.1**
 
 ---
 
@@ -89,20 +89,20 @@ Current version: **v1.7.0**
 
 | # | File | Issue | Status |
 |---|------|-------|--------|
-| 34 | `writer.py:171` | `_safe()` prefixes legitimate negative numbers with apostrophe | ✅ |
-| 35 | `writer.py:155`, `main.py:328,342` | `utf-8-sig` append inserts BOM mid-file | ✅ |
-| 36 | `writer.py:124-141` | `.bak` never cleaned up after success | ✅ |
-| 37 | `notifier.py:253-274` | `_build_xlsx()` never calls `wb.close()` | ✅ |
-| 38 | `fetcher.py:13` | Unused `import json` (one-time migration only) | ✅ |
-| 39 | `fetcher.py:121-123` | `_save_processed_ids` re-inserts full set every call | ✅ |
-| 40 | `fetcher.py:207-271` | Pre-scan password emails never marked processed | ✅ |
-| 41 | `zetta_handler.py:150-165` | No decompressed size limit on zip entries (zip bomb) | ✅ |
-| 42 | `fetcher.py:320` | Filename sanitization missing null bytes / control chars | ✅ |
-| 43 | `utils.py:20` | `format_date()` missing `DD.MM.YYYY HH:MM:SS` format | ✅ |
-| 44 | `utils.py:88` | `get_cell_str()` returns `"123456.0"` for integer cells | ✅ |
+| 34 | `writer.py:171` | `_safe()` prefixes legitimate negative numbers with apostrophe | ✅ v1.7.1 |
+| 35 | `writer.py:155`, `main.py:328,342` | `utf-8-sig` append inserts BOM mid-file | ✅ v1.7.1 |
+| 36 | `writer.py:124-141` | `.bak` never cleaned up after success | ✅ v1.7.1 |
+| 37 | `notifier.py:253-274` | `_build_xlsx()` never calls `wb.close()` | ✅ v1.7.1 |
+| 38 | `fetcher.py:13` | Unused `import json` (one-time migration only) | ✅ v1.7.1 |
+| 39 | `fetcher.py:121-123` | `_save_processed_ids` re-inserts full set every call | ✅ v1.7.1 |
+| 40 | `fetcher.py:207-271` | Pre-scan password emails never marked processed | ✅ v1.7.1 |
+| 41 | `zetta_handler.py:150-165` | No decompressed size limit on zip entries (zip bomb) | ✅ v1.7.1 |
+| 42 | `fetcher.py:320` | Filename sanitization missing null bytes / control chars | ✅ v1.7.1 |
+| 43 | `utils.py:20` | `format_date()` missing `DD.MM.YYYY HH:MM:SS` format | ✅ v1.7.1 |
+| 44 | `utils.py:88` | `get_cell_str()` returns `"123456.0"` for integer cells | ✅ v1.7.1 |
 | 45 | Multiple parsers | Inconsistent `dtype=str` usage (6 of 16) | ⏭️ SKIP |
-| 46 | absolut, reso, vsk, zetta, euroins, renins | No error log when FIO column not found | ✅ |
-| 47 | `main.py:382,459` | No graceful error if `config['output']['master_file']` missing | ✅ |
+| 46 | absolut, reso, vsk, zetta, euroins, renins | No error log when FIO column not found | ✅ v1.7.1 |
+| 47 | `main.py:382,459` | No graceful error if `config['output']['master_file']` missing | ✅ v1.7.1 |
 
 ---
 

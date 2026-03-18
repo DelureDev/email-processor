@@ -16,6 +16,7 @@
 - **FIO column guard (#46)**: 6 parsers (absolut, reso, vsk, euroins, renins, zetta) now return `[]` with error log when FIO column not found
 - **Config graceful default (#47)**: `config['output']['master_file']` uses `.get()` with `'./output/master.xlsx'` default in both `run_imap_mode` and `run_local_mode`
 - Updated test for `.bak` cleanup behavior
+- **Test mode encoding**: fixed `--test` crash on Windows (cp1252 console) — replaced emoji with ASCII, force utf-8 stdout
 
 ## [1.7.0] - 2026-03-19
 ### Fixed (Medium — code review v2)
