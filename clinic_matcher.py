@@ -124,4 +124,5 @@ def extract_policy_comment(filepath: str) -> str:
     except Exception as e:
         logger.warning(f"extract_policy_comment: could not read {filepath}: {e}")
 
+    logger.warning(f"extract_policy_comment: nothing found in {os.path.basename(filepath)} — add column header to _COMMENT_COLUMNS or keyword to _COMMENT_ROW_KEYWORDS")
     return ''

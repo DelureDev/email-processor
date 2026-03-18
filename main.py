@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.5.0"
+__version__ = "1.5.1"
 
 import os
 import re
@@ -212,6 +212,11 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
         comment = extract_policy_comment(filepath)
     records = [{**r, 'Клиника': clinic, 'Комментарий в полис': comment} for r in records]
 
+    if clinic == '⚠️ Не определено':
+        stats['unmatched_clinics'].append(filename)
+    if need_comment and not comment:
+        stats['missing_comments'].append(filename)
+
     # Track stats
     stats['files_processed'] += 1
     for r in records:
@@ -273,6 +278,8 @@ def make_stats() -> dict:
         'new_records': [],
         'monthly_records': [],
         'master_path': '',
+        'unmatched_clinics': [],
+        'missing_comments': [],
     }
 
 
@@ -532,6 +539,8 @@ def run_test_mode(folder: str, config: dict):
         print(f"✅ {fmt.upper():12s} | {len(records):3d} records | {filename} | 🏥 {clinic}")
         if comment:
             print(f"   💬 {comment[:80]}")
+        elif need_comment:
+            print(f"   💬 ⚠ комментарий не найден (extract_comment=true, но ничего не извлечено)")
         for r in records[:3]:  # show first 3
             fio = (r.get('ФИО') or '')[:35]
             polis = (r.get('№ полиса') or '')[:20]

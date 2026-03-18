@@ -76,7 +76,9 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
     unknown = stats.get('unknown_files', [])
 
     # Determine health status
-    has_problems = bool(errors) or bool(unknown)
+    unmatched_clinics = stats.get('unmatched_clinics', [])
+    missing_comments = stats.get('missing_comments', [])
+    has_problems = bool(errors) or bool(unknown) or bool(unmatched_clinics) or bool(missing_comments)
 
     msg['From'] = smtp_cfg['from_address']
     msg['To'] = ', '.join(smtp_cfg['recipients'])
@@ -92,13 +94,17 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
 
     # ── Health status banner ──
     if has_problems:
-        problem_count = len(errors) + len(unknown)
+        problem_count = len(errors) + len(unknown) + len(unmatched_clinics) + len(missing_comments)
         body += f"""<div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 12px 16px; margin: 16px 0; border-radius: 4px;">
 <strong style="color: #dc2626;">⚠ Обнаружено проблем: {problem_count}</strong>"""
         if errors:
             body += f"<br>Ошибки: {len(errors)}"
         if unknown:
             body += f"<br>Нераспознанные файлы: {len(unknown)}"
+        if unmatched_clinics:
+            body += f"<br>Клиника не определена: {len(unmatched_clinics)} файл(ов)"
+        if missing_comments:
+            body += f"<br>Комментарий в полис не найден: {len(missing_comments)} файл(ов)"
         body += "</div>"
     else:
         body += f"""<div style="background: #f0fdf4; border-left: 4px solid #16a34a; padding: 12px 16px; margin: 16px 0; border-radius: 4px;">
@@ -138,6 +144,26 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
         for company, count in sorted(by_company.items(), key=lambda x: -x[1]):
             body += f"<tr><td>{html.escape(str(company))}</td><td align='center'>{count}</td></tr>"
         body += "</table>"
+
+    # Clinic detection issues
+    unmatched = stats.get('unmatched_clinics', [])
+    missing_comments = stats.get('missing_comments', [])
+    if unmatched or missing_comments:
+        body += "<h3 style='color: #b45309;'>🏥 Проблемы с клиниками:</h3>"
+        if unmatched:
+            body += f"<p><strong>Не определена клиника ({len(unmatched)} файл(ов)):</strong></p>"
+            body += "<p style='color: #666; font-size: 13px;'>Добавьте ключевые слова в <code>clinics.yaml</code> для этих файлов.</p>"
+            body += "<ul>"
+            for f in unmatched[:20]:
+                body += f"<li><code>{html.escape(str(f))}</code></li>"
+            body += "</ul>"
+        if missing_comments:
+            body += f"<p><strong>Комментарий в полис не найден ({len(missing_comments)} файл(ов)):</strong></p>"
+            body += "<p style='color: #666; font-size: 13px;'>Клиника распознана, <code>extract_comment: true</code>, но ничего не извлечено. Добавьте заголовок колонки в <code>_COMMENT_COLUMNS</code> или ключевое слово в <code>_COMMENT_ROW_KEYWORDS</code>.</p>"
+            body += "<ul>"
+            for f in missing_comments[:20]:
+                body += f"<li><code>{html.escape(str(f))}</code></li>"
+            body += "</ul>"
 
     # Errors
     if errors:

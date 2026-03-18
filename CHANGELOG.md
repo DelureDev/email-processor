@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.1] - 2026-03-18
+### Added
+- Track `unmatched_clinics` and `missing_comments` in stats dict
+- Email report shows clinic detection issues: files with no clinic match and files where comment extraction found nothing (with actionable hints on what to fix)
+- Clinic issues included in health banner problem count and subject emoji
+- `--test` mode shows warning when `extract_comment=True` but nothing extracted
+- `clinic_matcher.py` logs a warning when `extract_policy_comment()` finds nothing, with a hint on what to add
+
 ## [1.5.0] - 2026-03-18
 ### Added
 - `Комментарий в полис` column — universal policy comment extractor
