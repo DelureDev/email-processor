@@ -65,32 +65,37 @@ def parse(filepath: str) -> list[dict]:
 
     headers = build_header_map(df, header_row)
     col_fio = first_col(headers, ('фио',), ('фамилия имя',), ('фамилия',))
+    if col_fio is None:
+        logger.error(f"ZETTA: Could not find FIO column in {filepath}")
+        return []
     col_birth = find_col(headers, 'дата', 'рожд')
     col_polis = first_col(headers, ('полис',), ('номер',))
 
     for i in range(header_row + 1, len(df)):
-        fio = get_cell_str(df, i, col_fio)
-        if not fio:
-            first_val = get_cell_str(df, i, 0)
-            if first_val and 'клиентов' in first_val.lower():
-                break
-            continue
+        try:
+            fio = get_cell_str(df, i, col_fio)
+            if not fio:
+                first_val = get_cell_str(df, i, 0)
+                if first_val and 'клиентов' in first_val.lower():
+                    break
+                continue
 
-        fio = fio.upper()
+            fio = fio.upper()
+            if any(w in fio.lower() for w in ['итого', 'всего', 'клиентов', 'программа']):
+                continue
 
-        if any(w in fio.lower() for w in ['итого', 'всего', 'клиентов', 'программа']):
-            continue
-
-        record = {
-            'ФИО': fio,
-            'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
-            '№ полиса': get_cell_str(df, i, col_polis),
-            'Начало обслуживания': srok_start,
-            'Конец обслуживания': srok_end,
-            'Страховая компания': 'Зетта Страхование жизни',
-            'Страхователь': strahovatel,
-        }
-        results.append(record)
+            record = {
+                'ФИО': fio,
+                'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
+                '№ полиса': get_cell_str(df, i, col_polis),
+                'Начало обслуживания': srok_start,
+                'Конец обслуживания': srok_end,
+                'Страховая компания': 'Зетта Страхование жизни',
+                'Страхователь': strahovatel,
+            }
+            results.append(record)
+        except Exception as e:
+            logger.warning(f"ZETTA: Skipping row {i} due to error: {e}")
 
     logger.info(f"ZETTA: parsed {len(results)} records from {filepath}")
     return results

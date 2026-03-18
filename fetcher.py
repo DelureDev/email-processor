@@ -10,7 +10,6 @@ import time
 from email.header import decode_header
 import os
 import re
-import json
 import tempfile
 import logging
 from datetime import datetime, timedelta
@@ -79,6 +78,7 @@ class IMAPFetcher:
         self._db_path = (json_path[:-5] if json_path.endswith('.json') else json_path) + '.db'
         self.dry_run = dry_run
         self.processed_ids = self._load_processed_ids()
+        self._initial_ids = set(self.processed_ids)  # snapshot — only new IDs saved to DB
 
         os.makedirs(self.temp_folder, exist_ok=True)
 
@@ -93,6 +93,7 @@ class IMAPFetcher:
             # One-time migration from JSON
             if os.path.exists(self.processed_file):
                 try:
+                    import json
                     with open(self.processed_file, 'r') as f:
                         ids = json.load(f)
                     now = datetime.now().isoformat()
@@ -111,6 +112,9 @@ class IMAPFetcher:
             conn.close()
 
     def _save_processed_ids(self):
+        new_ids = self.processed_ids - self._initial_ids
+        if not new_ids:
+            return
         now = datetime.now().isoformat()
         conn = sqlite3.connect(self._db_path)
         try:
@@ -120,7 +124,7 @@ class IMAPFetcher:
             )
             conn.executemany(
                 'INSERT OR IGNORE INTO processed_ids (message_id, seen_at) VALUES (?, ?)',
-                [(mid, now) for mid in self.processed_ids],
+                [(mid, now) for mid in new_ids],
             )
             # Cap to 5000 most recent entries (by seen_at)
             count = conn.execute('SELECT COUNT(*) FROM processed_ids').fetchone()[0]
@@ -226,10 +230,12 @@ class IMAPFetcher:
                     if msg_data is None:
                         continue
                     msg = email.message_from_bytes(msg_data[0][1])
+                    message_id = msg.get('Message-ID', uid.decode())
                     monthly = _extract_monthly_pwd_from_msg(msg)
                     if monthly and monthly['password'] not in zetta_passwords:
                         zetta_passwords.insert(0, monthly['password'])
                         logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
+                    self.processed_ids.add(message_id)
                 except Exception as e:
                     logger.debug(f"Error reading password email: {e}")
 
@@ -329,7 +335,7 @@ class IMAPFetcher:
                     continue
 
                 filename = decode_mime_header(filename)
-                safe_name = f"{msg_id_str}_{re.sub(r'[\\/:*?\"<>|]', '_', os.path.basename(filename))}"
+                safe_name = f"{msg_id_str}_{re.sub(r'[\x00-\x1f\\/:*?\"<>|]', '_', os.path.basename(filename))}"
                 filepath = os.path.join(self.temp_folder, safe_name)
 
                 try:

@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.7.1] - 2026-03-19
+### Fixed (Low — code review v2)
+- **`_safe()` negative numbers (#34)**: `-500` no longer gets formula-injection prefix — only prefixes `-` when not followed by a digit
+- **BOM mid-file (#35)**: `utf-8-sig` encoding only used for new CSV files; appends use plain `utf-8` — fixes BOM bytes appearing mid-file (writer.py, main.py x2)
+- **`.bak` cleanup (#36)**: `master.xlsx.bak` removed after successful write — prevents stale backup accumulation
+- **`wb.close()` (#37)**: `_build_xlsx()` in notifier.py now closes workbook in `finally` block
+- **`import json` (#38)**: moved from top-level to local import in fetcher.py migration path (only used once)
+- **Efficient processed IDs (#39)**: `_save_processed_ids()` now only inserts newly-added IDs (diff from snapshot) instead of re-inserting entire set
+- **Pre-scan password marking (#40)**: password-only emails now marked as processed during pre-scan pass
+- **Zip bomb guard (#41)**: 100MB per-entry size limit before extraction in zetta_handler.py
+- **Filename sanitization (#42)**: control characters stripped from attachment filenames in fetcher.py
+- **`format_date` datetime formats (#43)**: added `DD.MM.YYYY HH:MM:SS` and `DD/MM/YYYY HH:MM:SS` format support
+- **`get_cell_str` float-to-int (#44)**: `123456.0` now renders as `"123456"` instead of `"123456.0"`
+- **FIO column guard (#46)**: 6 parsers (absolut, reso, vsk, euroins, renins, zetta) now return `[]` with error log when FIO column not found
+- **Config graceful default (#47)**: `config['output']['master_file']` uses `.get()` with `'./output/master.xlsx'` default in both `run_imap_mode` and `run_local_mode`
+- Updated test for `.bak` cleanup behavior
+
 ## [1.7.0] - 2026-03-19
 ### Fixed (Medium — code review v2)
 - **Cross-run dedup broken (#24)**: clinic detection now runs BEFORE the dedup filter in `process_file()` — previously `Клиника` was always empty in the dedup key for incoming records, so duplicates were never detected against the master

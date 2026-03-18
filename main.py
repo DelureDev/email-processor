@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.7.0"
+__version__ = "1.7.1"
 
 import os
 import re
@@ -326,7 +326,8 @@ def _export_to_network(config: dict, stats: dict) -> None:
     daily_dest = os.path.join(folder, f'records_{date_str}.csv')
     try:
         write_header = not os.path.exists(daily_dest)
-        with open(daily_dest, 'a', newline='', encoding='utf-8-sig') as f:
+        encoding = 'utf-8-sig' if write_header else 'utf-8'
+        with open(daily_dest, 'a', newline='', encoding=encoding) as f:
             w = csv_mod.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
             if write_header:
                 w.writeheader()
@@ -341,7 +342,8 @@ def _export_to_network(config: dict, stats: dict) -> None:
     monthly_dest = os.path.join(folder, f'master_{month_str}.csv')
     try:
         write_header = not os.path.exists(monthly_dest)
-        with open(monthly_dest, 'a', newline='', encoding='utf-8-sig') as f:
+        encoding = 'utf-8-sig' if write_header else 'utf-8'
+        with open(monthly_dest, 'a', newline='', encoding=encoding) as f:
             w = csv_mod.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
             if write_header:
                 w.writeheader()
@@ -382,7 +384,7 @@ def run_imap_mode(config: dict, dry_run: bool = False):
     from fetcher import IMAPFetcher
 
     stats = make_stats()
-    master_path = config['output']['master_file']
+    master_path = config.get('output', {}).get('master_file', './output/master.xlsx')
     stats['master_path'] = master_path
 
     # Load existing records for dedup
@@ -458,7 +460,7 @@ def run_local_mode(folder: str, config: dict, dry_run: bool = False):
     """Process files from a local folder."""
     logger = logging.getLogger(__name__)
     stats = make_stats()
-    master_path = config['output']['master_file']
+    master_path = config.get('output', {}).get('master_file', './output/master.xlsx')
     stats['master_path'] = master_path
 
     existing_keys = None

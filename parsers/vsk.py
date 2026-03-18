@@ -25,6 +25,9 @@ def parse(filepath: str) -> list[dict]:
 
     headers = build_header_map(df, header_row)
     col_fio = find_col(headers, 'фио')
+    if col_fio is None:
+        logger.error(f"VSK: Could not find FIO column in {filepath}")
+        return []
     col_birth = find_col(headers, 'дата', 'рожд')
     col_polis = find_col(headers, 'полис')
     col_start = find_col(headers, 'дата', 'прикрепл')

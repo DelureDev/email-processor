@@ -17,7 +17,7 @@ def format_date(val) -> str | None:
     s = str(val).strip()
     if not s:
         return None
-    for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%d.%m.%Y', '%d/%m/%Y']:
+    for fmt in ['%Y-%m-%d %H:%M:%S', '%d.%m.%Y %H:%M:%S', '%d/%m/%Y %H:%M:%S', '%Y-%m-%d', '%d.%m.%Y', '%d/%m/%Y']:
         try:
             return datetime.strptime(s, fmt).strftime('%d.%m.%Y')
         except ValueError:
@@ -82,11 +82,16 @@ def assemble_fio(df, row_idx: int, col_familia: int,
 
 
 def get_cell_str(df, row_idx: int, col_idx: int | None) -> str | None:
-    """Safely get a stripped string from a cell, or None."""
+    """Safely get a stripped string from a cell, or None.
+    Converts whole-number floats (e.g. 123456.0) to int strings (123456).
+    """
     if col_idx is None:
         return None
     val = df.iloc[row_idx, col_idx]
     if pd.isna(val):
         return None
-    s = str(val).strip()
+    if isinstance(val, float) and val == int(val):
+        s = str(int(val)).strip()
+    else:
+        s = str(val).strip()
     return s if s else None

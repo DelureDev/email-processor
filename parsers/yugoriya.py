@@ -33,25 +33,27 @@ def parse(filepath: str) -> list[dict]:
     col_sk = first_col(headers, ('страховой', 'компани'), ('страховая',))
 
     for i in range(header_row + 1, len(df)):
-        familia = get_cell_str(df, i, col_familia)
-        if not familia:
-            continue
-        if any(w in familia.lower() for w in ['югория', 'директор', 'подпись', 'итого']):
-            continue
+        try:
+            familia = get_cell_str(df, i, col_familia)
+            if not familia:
+                continue
+            if any(w in familia.lower() for w in ['югория', 'директор', 'подпись', 'итого']):
+                continue
 
-        fio = assemble_fio(df, i, col_familia, col_imya, col_otchestvo).upper()
-        sk = get_cell_str(df, i, col_sk) or 'ГСК Югория'
-
-        record = {
-            'ФИО': fio,
-            'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
-            '№ полиса': get_cell_str(df, i, col_polis),
-            'Начало обслуживания': format_date(df.iloc[i, col_start]) if col_start is not None else None,
-            'Конец обслуживания': format_date(df.iloc[i, col_otkr]) if col_otkr is not None else None,
-            'Страховая компания': sk,
-            'Страхователь': get_cell_str(df, i, col_strahovatel),
-        }
-        results.append(record)
+            fio = assemble_fio(df, i, col_familia, col_imya, col_otchestvo).upper()
+            sk = get_cell_str(df, i, col_sk) or 'ГСК Югория'
+            record = {
+                'ФИО': fio,
+                'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
+                '№ полиса': get_cell_str(df, i, col_polis),
+                'Начало обслуживания': format_date(df.iloc[i, col_start]) if col_start is not None else None,
+                'Конец обслуживания': format_date(df.iloc[i, col_otkr]) if col_otkr is not None else None,
+                'Страховая компания': sk,
+                'Страхователь': get_cell_str(df, i, col_strahovatel),
+            }
+            results.append(record)
+        except Exception as e:
+            logger.warning(f"YUGORIYA: Skipping row {i} due to error: {e}")
 
     logger.info(f"YUGORIYA: parsed {len(results)} records from {filepath}")
     return results

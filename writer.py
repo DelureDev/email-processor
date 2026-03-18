@@ -139,6 +139,12 @@ def write_batch_to_master(batch: list[tuple[list[dict], str]], master_path: str)
                     except OSError as restore_err:
                         logger.error(f"Restore from backup also failed: {restore_err}")
                 raise
+            # Clean up backup after successful write
+            if bak_created:
+                try:
+                    os.remove(bak_path)
+                except OSError:
+                    pass
         else:
             _create_new(all_records, master_path)
 
@@ -152,7 +158,9 @@ def _export_csv(master_path: str, new_records: list[dict]) -> None:
     csv_path = os.path.splitext(master_path)[0] + '.csv'
     try:
         write_header = not os.path.exists(csv_path)
-        with open(csv_path, 'a', newline='', encoding='utf-8-sig') as f:
+        # Use utf-8-sig only for new files (writes BOM); utf-8 for appends (no mid-file BOM)
+        encoding = 'utf-8-sig' if write_header else 'utf-8'
+        with open(csv_path, 'a', newline='', encoding=encoding) as f:
             writer = csv_mod.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore', delimiter=';')
             if write_header:
                 writer.writeheader()
@@ -164,11 +172,20 @@ def _export_csv(master_path: str, new_records: list[dict]) -> None:
 
 
 def _safe(value) -> object:
-    """Prevent formula injection by prefixing formula-like strings with apostrophe."""
+    """Prevent formula injection by prefixing formula-like strings with apostrophe.
+    Does not prefix negative numbers (e.g. -500 stays as-is).
+    """
     if value is None:
         return ''
     s = str(value)
-    return ("'" + s) if s and s[0] in ('=', '+', '-', '@', '\t', '\r') else value
+    if not s:
+        return value
+    c = s[0]
+    if c in ('=', '+', '@', '\t', '\r'):
+        return "'" + s
+    if c == '-' and (len(s) < 2 or not s[1].isdigit()):
+        return "'" + s
+    return value
 
 
 def _create_new(records: list[dict], path: str):

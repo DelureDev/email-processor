@@ -154,6 +154,11 @@ def unzip_with_password(zip_path: str, password: str, extract_to: str) -> list[s
                     if not full_path.startswith(os.path.realpath(extract_to) + os.sep):
                         logger.error(f"Zip Slip blocked: {name}")
                         continue
+                    # Reject entries over 100 MB (zip bomb guard)
+                    info = zf.getinfo(name)
+                    if info.file_size > 100 * 1024 * 1024:
+                        logger.warning(f"Zip entry too large ({info.file_size} bytes), skipping: {name}")
+                        continue
                     # Try cp866 first (7-Zip default for Cyrillic), fall back to utf-8
                     success = False
                     for encoding in ('cp866', 'utf-8'):

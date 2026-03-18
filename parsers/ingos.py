@@ -57,27 +57,26 @@ def parse(filepath: str) -> list[dict]:
         return []
 
     for i in range(header_row + 1, len(df)):
-        familia = get_cell_str(df, i, col_familia)
-        if not familia:
-            continue
-        if any(w in familia.lower() for w in ['итого', 'всего', 'клиентов', 'страница']):
-            continue
+        try:
+            familia = get_cell_str(df, i, col_familia)
+            if not familia:
+                continue
+            if any(w in familia.lower() for w in ['итого', 'всего', 'клиентов', 'страница']):
+                continue
 
-        fio = assemble_fio(df, i, col_familia, col_imya, col_otch).upper()
-
-        start_date = format_date(df.iloc[i, col_prikr]) if col_prikr is not None else None
-        end_date = format_date(df.iloc[i, col_otkr]) if col_otkr is not None else None
-
-        record = {
-            'ФИО': fio,
-            'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
-            '№ полиса': get_cell_str(df, i, col_polis),
-            'Начало обслуживания': start_date,
-            'Конец обслуживания': end_date,
-            'Страховая компания': 'Ингосстрах',
-            'Страхователь': strahovatel,
-        }
-        results.append(record)
+            fio = assemble_fio(df, i, col_familia, col_imya, col_otch).upper()
+            record = {
+                'ФИО': fio,
+                'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
+                '№ полиса': get_cell_str(df, i, col_polis),
+                'Начало обслуживания': format_date(df.iloc[i, col_prikr]) if col_prikr is not None else None,
+                'Конец обслуживания': format_date(df.iloc[i, col_otkr]) if col_otkr is not None else None,
+                'Страховая компания': 'Ингосстрах',
+                'Страхователь': strahovatel,
+            }
+            results.append(record)
+        except Exception as e:
+            logger.warning(f"INGOS: Skipping row {i} due to error: {e}")
 
     logger.info(f"INGOS: parsed {len(results)} records from {filepath}")
     return results

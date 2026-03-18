@@ -41,11 +41,13 @@ class TestWriteToMaster:
         assert df.iloc[0]['ФИО'] == 'ПЕРВЫЙ'
         assert df.iloc[1]['ФИО'] == 'ВТОРОЙ'
 
-    def test_creates_backup(self, tmp_path):
+    def test_backup_cleaned_after_success(self, tmp_path):
         path = str(tmp_path / "master.xlsx")
         write_to_master([_make_record()], path, source_filename="a.xlsx")
         write_to_master([_make_record(ФИО='SECOND')], path, source_filename="b.xlsx")
-        assert os.path.exists(path + '.bak')
+        # .bak is created during write but removed after successful completion
+        assert not os.path.exists(path + '.bak')
+        assert os.path.exists(path)
 
     def test_does_not_mutate_input(self, tmp_path):
         path = str(tmp_path / "master.xlsx")

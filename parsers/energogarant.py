@@ -37,25 +37,25 @@ def parse(filepath: str) -> list[dict]:
         return []
 
     for i in range(header_row + 1, len(df)):
-        fio = get_cell_str(df, i, col_fio)
-        if not fio:
-            continue
-        if any(w in fio.lower() for w in ['итого', 'всего', 'с уважением', 'директор', 'начальник']):
-            continue
+        try:
+            fio = get_cell_str(df, i, col_fio)
+            if not fio:
+                continue
+            if any(w in fio.lower() for w in ['итого', 'всего', 'с уважением', 'директор', 'начальник']):
+                continue
 
-        # Strahovatel from row (reset each row)
-        strahovatel = get_cell_str(df, i, col_work)
-
-        record = {
-            'ФИО': fio.upper(),
-            'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
-            '№ полиса': get_cell_str(df, i, col_polis),
-            'Начало обслуживания': format_date(df.iloc[i, col_prikr]) if col_prikr is not None else None,
-            'Конец обслуживания': format_date(df.iloc[i, col_otkr]) if col_otkr is not None else None,
-            'Страховая компания': 'Энергогарант',
-            'Страхователь': strahovatel,
-        }
-        results.append(record)
+            record = {
+                'ФИО': fio.upper(),
+                'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
+                '№ полиса': get_cell_str(df, i, col_polis),
+                'Начало обслуживания': format_date(df.iloc[i, col_prikr]) if col_prikr is not None else None,
+                'Конец обслуживания': format_date(df.iloc[i, col_otkr]) if col_otkr is not None else None,
+                'Страховая компания': 'Энергогарант',
+                'Страхователь': get_cell_str(df, i, col_work),
+            }
+            results.append(record)
+        except Exception as e:
+            logger.warning(f"ENERGOGARANT: Skipping row {i} due to error: {e}")
 
     logger.info(f"ENERGOGARANT: parsed {len(results)} records from {filepath}")
     return results
