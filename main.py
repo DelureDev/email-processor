@@ -266,8 +266,35 @@ def make_stats() -> dict:
         'skipped_files': [],
         'empty_files': [],
         'new_records': [],
+        'monthly_records': [],
         'master_path': '',
     }
+
+
+def _attach_monthly_if_last_day(config: dict, stats: dict) -> None:
+    """On the last day of the month, read master.xlsx and populate stats['monthly_records']."""
+    import calendar
+    today = datetime.now()
+    last_day = calendar.monthrange(today.year, today.month)[1]
+    if today.day != last_day:
+        return
+    master_path = config.get('output', {}).get('master_file', './output/master.xlsx')
+    if not os.path.exists(master_path):
+        return
+    logger = logging.getLogger(__name__)
+    try:
+        import pandas as pd
+        df = pd.read_excel(master_path, dtype=str).fillna('')
+        month_prefix = today.strftime('%m.%Y')  # matches DD.MM.YYYY format
+        if 'Дата обработки' in df.columns:
+            mask = df['Дата обработки'].str.contains(month_prefix, na=False)
+            monthly = df[mask].to_dict('records')
+        else:
+            monthly = df.to_dict('records')
+        stats['monthly_records'] = monthly
+        logger.info(f"Monthly report: {len(monthly)} records for {today.strftime('%B %Y')}")
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Failed to build monthly records: {e}")
 
 
 def _export_to_network(config: dict, stats: dict) -> None:
@@ -393,6 +420,7 @@ def run_imap_mode(config: dict, dry_run: bool = False):
 
     if not dry_run:
         _export_to_network(config, stats)
+        _attach_monthly_if_last_day(config, stats)
         from notifier import send_report
         send_report(config, stats)
 
@@ -432,6 +460,7 @@ def run_local_mode(folder: str, config: dict, dry_run: bool = False):
 
     if not dry_run:
         _export_to_network(config, stats)
+        _attach_monthly_if_last_day(config, stats)
         from notifier import send_report
         send_report(config, stats)
 

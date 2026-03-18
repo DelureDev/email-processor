@@ -198,15 +198,25 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
 
     msg.attach(MIMEText(body, 'html', 'utf-8'))
 
-    # Attach daily delta as xlsx only (CSV goes to network share)
+    # Attach daily delta xlsx
     if new_records:
         date_str = datetime.now().strftime('%Y-%m-%d')
-
         xlsx_bytes = _build_xlsx(new_records)
         part = MIMEBase('application', 'vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         part.set_payload(xlsx_bytes)
         encoders.encode_base64(part)
         part.add_header('Content-Disposition', f'attachment; filename="records_{date_str}.xlsx"')
+        msg.attach(part)
+
+    # Attach monthly master xlsx on last day of month
+    monthly_records = stats.get('monthly_records', [])
+    if monthly_records:
+        month_str = datetime.now().strftime('%Y-%m')
+        xlsx_bytes = _build_xlsx(monthly_records)
+        part = MIMEBase('application', 'vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        part.set_payload(xlsx_bytes)
+        encoders.encode_base64(part)
+        part.add_header('Content-Disposition', f'attachment; filename="master_{month_str}.xlsx"')
         msg.attach(part)
 
     return msg
