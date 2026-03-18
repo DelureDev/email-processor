@@ -266,20 +266,45 @@ def make_stats() -> dict:
 
 
 def _export_to_network(config: dict, stats: dict) -> None:
-    """Write daily delta CSV to network folder if configured."""
+    """Write daily delta CSV and monthly master CSV to network folder if configured."""
     folder = config.get('output', {}).get('csv_export_folder', '').strip()
     if not folder or not stats.get('new_records'):
         return
     logger = logging.getLogger(__name__)
-    from notifier import _build_csv
-    date_str = datetime.now().strftime('%Y-%m-%d')
-    dest = os.path.join(folder, f'records_{date_str}.csv')
+    import csv as csv_mod
+    from writer import COLUMNS
+
+    now = datetime.now()
+    records = stats['new_records']
+
+    # 1. Daily delta — overwrite each run (same as before)
+    date_str = now.strftime('%Y-%m-%d')
+    daily_dest = os.path.join(folder, f'records_{date_str}.csv')
     try:
-        with open(dest, 'wb') as f:
-            f.write(_build_csv(stats['new_records']))
-        logger.info(f"Exported {len(stats['new_records'])} records to {dest}")
+        rows = ['\ufeff'.encode('utf-8')]
+        buf = __import__('io').StringIO()
+        w = csv_mod.DictWriter(buf, fieldnames=COLUMNS, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
+        w.writeheader()
+        w.writerows(records)
+        with open(daily_dest, 'wb') as f:
+            f.write('\ufeff'.encode('utf-8') + buf.getvalue().encode('utf-8'))
+        logger.info(f"Exported daily delta ({len(records)} records) to {daily_dest}")
     except Exception as e:
-        logger.error(f"Failed to export CSV to network: {e}")
+        logger.error(f"Failed to export daily CSV to network: {e}")
+
+    # 2. Monthly master — append to current month file, new file each month
+    month_str = now.strftime('%Y-%m')
+    monthly_dest = os.path.join(folder, f'master_{month_str}.csv')
+    try:
+        write_header = not os.path.exists(monthly_dest)
+        with open(monthly_dest, 'a', newline='', encoding='utf-8-sig') as f:
+            w = csv_mod.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
+            if write_header:
+                w.writeheader()
+            w.writerows(records)
+        logger.info(f"Appended {len(records)} records to monthly master {monthly_dest}")
+    except Exception as e:
+        logger.error(f"Failed to export monthly CSV to network: {e}")
 
 
 def _ping_healthcheck(config: dict, stats: dict) -> None:
