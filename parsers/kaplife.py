@@ -42,24 +42,27 @@ def parse(filepath: str) -> list[dict]:
         col_strah = find_col(headers, 'страхователь')
 
         for i in range(header_row + 1, len(df)):
-            polis = get_cell_str(df, i, col_polis)
-            if not polis:
-                continue
-            fio = get_cell_str(df, i, col_fio_new)
-            if not fio:
-                continue
-            if any(w in fio.lower() for w in ['контакт-центр', 'руководител', 'исполнител']):
-                continue
-            record = {
-                'ФИО': fio,
-                'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
-                '№ полиса': polis,
-                'Начало обслуживания': format_date(df.iloc[i, col_start]) if col_start is not None else None,
-                'Конец обслуживания': format_date(df.iloc[i, col_end]) if col_end is not None else None,
-                'Страховая компания': 'Капитал Лайф',
-                'Страхователь': get_cell_str(df, i, col_strah),
-            }
-            results.append(record)
+            try:
+                polis = get_cell_str(df, i, col_polis)
+                if not polis:
+                    continue
+                fio = get_cell_str(df, i, col_fio_new)
+                if not fio:
+                    continue
+                if any(w in fio.lower() for w in ['контакт-центр', 'руководител', 'исполнител']):
+                    continue
+                record = {
+                    'ФИО': fio,
+                    'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
+                    '№ полиса': polis,
+                    'Начало обслуживания': format_date(df.iloc[i, col_start]) if col_start is not None else None,
+                    'Конец обслуживания': format_date(df.iloc[i, col_end]) if col_end is not None else None,
+                    'Страховая компания': 'Капитал Лайф',
+                    'Страхователь': get_cell_str(df, i, col_strah),
+                }
+                results.append(record)
+            except Exception as e:
+                logger.warning(f"KAPLIFE: Skipping row {i} due to error: {e}")
     else:
         # Standard Прикрепление format: split ФИО
         col_familia = find_col(headers, 'фамилия')
@@ -72,24 +75,27 @@ def parse(filepath: str) -> list[dict]:
         col_strah = find_col(headers, 'страхователь')
 
         for i in range(header_row + 1, len(df)):
-            familia = get_cell_str(df, i, col_familia)
-            if not familia:
-                continue
-            if any(w in familia.lower() for w in ['контакт-центр', 'руководител', 'исполнител', 'медицинский']):
-                continue
+            try:
+                familia = get_cell_str(df, i, col_familia)
+                if not familia:
+                    continue
+                if any(w in familia.lower() for w in ['контакт-центр', 'руководител', 'исполнител', 'медицинский']):
+                    continue
 
-            fio = assemble_fio(df, i, col_familia, col_imya, col_otchestvo)
+                fio = assemble_fio(df, i, col_familia, col_imya, col_otchestvo)
 
-            record = {
-                'ФИО': fio,
-                'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
-                '№ полиса': get_cell_str(df, i, col_polis),
-                'Начало обслуживания': format_date(df.iloc[i, col_start]) if col_start is not None else None,
-                'Конец обслуживания': format_date(df.iloc[i, col_end]) if col_end is not None else None,
-                'Страховая компания': 'Капитал Лайф',
-                'Страхователь': get_cell_str(df, i, col_strah),
-            }
-            results.append(record)
+                record = {
+                    'ФИО': fio,
+                    'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
+                    '№ полиса': get_cell_str(df, i, col_polis),
+                    'Начало обслуживания': format_date(df.iloc[i, col_start]) if col_start is not None else None,
+                    'Конец обслуживания': format_date(df.iloc[i, col_end]) if col_end is not None else None,
+                    'Страховая компания': 'Капитал Лайф',
+                    'Страхователь': get_cell_str(df, i, col_strah),
+                }
+                results.append(record)
+            except Exception as e:
+                logger.warning(f"KAPLIFE: Skipping row {i} due to error: {e}")
 
     logger.info(f"KAPLIFE: parsed {len(results)} records from {filepath}")
     return results

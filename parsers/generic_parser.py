@@ -96,36 +96,39 @@ def parse(filepath: str) -> list[dict]:
     col_work = first_col(headers, ('место', 'работ'), ('страхователь',))
 
     for i in range(header_row + 1, len(df)):
-        if has_split_fio:
-            familia = get_cell_str(df, i, col_familia)
-            if not familia:
-                continue
-            if any(w in familia.lower() for w in ['итого', 'всего', 'генеральный', 'директор', 'страница']):
-                continue
-            fio = assemble_fio(df, i, col_familia, col_imya, col_otch).upper()
-        else:
-            fio = get_cell_str(df, i, col_fio)
-            if not fio:
-                continue
-            fio = fio.upper()
-            if any(w in fio.lower() for w in ['итого', 'всего', 'клиентов', 'программа']):
-                continue
+        try:
+            if has_split_fio:
+                familia = get_cell_str(df, i, col_familia)
+                if not familia:
+                    continue
+                if any(w in familia.lower() for w in ['итого', 'всего', 'генеральный', 'директор', 'страница']):
+                    continue
+                fio = assemble_fio(df, i, col_familia, col_imya, col_otch).upper()
+            else:
+                fio = get_cell_str(df, i, col_fio)
+                if not fio:
+                    continue
+                fio = fio.upper()
+                if any(w in fio.lower() for w in ['итого', 'всего', 'клиентов', 'программа']):
+                    continue
 
-        row_start = format_date(df.iloc[i, col_start]) if col_start is not None else start_date
-        row_end = format_date(df.iloc[i, col_end]) if col_end is not None else end_date
-        row_company = get_cell_str(df, i, col_company) or company
-        row_work = get_cell_str(df, i, col_work) or strahovatel
+            row_start = format_date(df.iloc[i, col_start]) if col_start is not None else start_date
+            row_end = format_date(df.iloc[i, col_end]) if col_end is not None else end_date
+            row_company = get_cell_str(df, i, col_company) or company
+            row_work = get_cell_str(df, i, col_work) or strahovatel
 
-        record = {
-            'ФИО': fio,
-            'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
-            '№ полиса': get_cell_str(df, i, col_polis),
-            'Начало обслуживания': row_start,
-            'Конец обслуживания': row_end,
-            'Страховая компания': row_company or 'Неизвестная СК',
-            'Страхователь': row_work,
-        }
-        results.append(record)
+            record = {
+                'ФИО': fio,
+                'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
+                '№ полиса': get_cell_str(df, i, col_polis),
+                'Начало обслуживания': row_start,
+                'Конец обслуживания': row_end,
+                'Страховая компания': row_company or 'Неизвестная СК',
+                'Страхователь': row_work,
+            }
+            results.append(record)
+        except Exception as e:
+            logger.warning(f"GENERIC: Skipping row {i} due to error: {e}")
 
     logger.info(f"GENERIC: parsed {len(results)} records from {filepath}")
     return results

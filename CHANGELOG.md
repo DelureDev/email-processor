@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.6.1] - 2026-03-19
+### Fixed (Medium)
+- **Per-row try/except in all parsers**: all 15 parser data loops now catch per-row exceptions and skip bad rows with a warning instead of aborting the entire file — `alfa.py`, `kaplife.py` (both loops), `generic_parser.py` added; 13 parsers were already done in v1.6.0
+- **CSV formula injection**: `_export_csv()` in `writer.py` now applies `_safe()` to each cell value before writing
+- **Email attachment formula injection**: `_build_xlsx()` in `notifier.py` now applies `_safe()` to each cell value
+
 ## [1.6.0] - 2026-03-19
 ### Fixed (Critical)
 - **IMAP UIDs**: all IMAP operations now use stable UIDs (`uid('SEARCH'/'FETCH'/'COPY'/'STORE')`) instead of volatile sequence numbers — prevents moving/deleting wrong emails

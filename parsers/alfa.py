@@ -65,48 +65,51 @@ def parse(filepath: str) -> list[dict]:
 
     # Find all data rows by looking for rows where col_num is a number
     for i in range(len(df)):
-        val_0 = df.iloc[i, col_num]
-        if pd.isna(val_0):
-            continue
         try:
-            row_num = int(float(val_0))
-            if row_num < 1:
+            val_0 = df.iloc[i, col_num]
+            if pd.isna(val_0):
                 continue
-        except (ValueError, TypeError):
-            continue
+            try:
+                row_num = int(float(val_0))
+                if row_num < 1:
+                    continue
+            except (ValueError, TypeError):
+                continue
 
-        fio = get_cell_str(df, i, col_fio)
-        if not fio:
-            continue
+            fio = get_cell_str(df, i, col_fio)
+            if not fio:
+                continue
 
-        if any(w in fio.lower() for w in ['№ п/п', 'список', 'альфастрахование']):
-            continue
+            if any(w in fio.lower() for w in ['№ п/п', 'список', 'альфастрахование']):
+                continue
 
-        polis = get_cell_str(df, i, col_polis)
-        birth = format_date(df.iloc[i, col_birth]) if len(df.columns) > col_birth and pd.notna(df.iloc[i, col_birth]) else None
-        start_date = format_date(df.iloc[i, col_start]) if len(df.columns) > col_start and pd.notna(df.iloc[i, col_start]) else None
-        end_date = format_date(df.iloc[i, col_end]) if len(df.columns) > col_end and pd.notna(df.iloc[i, col_end]) else None
+            polis = get_cell_str(df, i, col_polis)
+            birth = format_date(df.iloc[i, col_birth]) if len(df.columns) > col_birth and pd.notna(df.iloc[i, col_birth]) else None
+            start_date = format_date(df.iloc[i, col_start]) if len(df.columns) > col_start and pd.notna(df.iloc[i, col_start]) else None
+            end_date = format_date(df.iloc[i, col_end]) if len(df.columns) > col_end and pd.notna(df.iloc[i, col_end]) else None
 
-        # Страхователь from group column: "Группа Яндекс; №0330S/045/7828/24П; ООО "Яндекс.Лавка""
-        strahovatel = None
-        if len(df.columns) > col_group and pd.notna(df.iloc[i, col_group]):
-            group_str = str(df.iloc[i, col_group]).strip()
-            parts = group_str.split(';')
-            if len(parts) >= 2:
-                strahovatel = parts[-1].strip()
-            else:
-                strahovatel = group_str
+            # Страхователь from group column: "Группа Яндекс; №0330S/045/7828/24П; ООО "Яндекс.Лавка""
+            strahovatel = None
+            if len(df.columns) > col_group and pd.notna(df.iloc[i, col_group]):
+                group_str = str(df.iloc[i, col_group]).strip()
+                parts = group_str.split(';')
+                if len(parts) >= 2:
+                    strahovatel = parts[-1].strip()
+                else:
+                    strahovatel = group_str
 
-        record = {
-            'ФИО': fio,
-            'Дата рождения': birth,
-            '№ полиса': polis,
-            'Начало обслуживания': start_date,
-            'Конец обслуживания': end_date,
-            'Страховая компания': 'АльфаСтрахование',
-            'Страхователь': strahovatel,
-        }
-        results.append(record)
+            record = {
+                'ФИО': fio,
+                'Дата рождения': birth,
+                '№ полиса': polis,
+                'Начало обслуживания': start_date,
+                'Конец обслуживания': end_date,
+                'Страховая компания': 'АльфаСтрахование',
+                'Страхователь': strahovatel,
+            }
+            results.append(record)
+        except Exception as e:
+            logger.warning(f"ALFA: Skipping row {i} due to error: {e}")
 
     logger.info(f"ALFA: parsed {len(results)} records from {filepath}")
     return results

@@ -250,7 +250,7 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
 
 def _build_xlsx(records: list[dict]) -> bytes:
     """Build styled xlsx from records list, returns bytes."""
-    from writer import COLUMNS, HEADER_FONT, HEADER_FILL, HEADER_ALIGNMENT, DATA_FONT, DATA_ALIGNMENT, THIN_BORDER, COLUMN_WIDTHS
+    from writer import COLUMNS, HEADER_FONT, HEADER_FILL, HEADER_ALIGNMENT, DATA_FONT, DATA_ALIGNMENT, THIN_BORDER, COLUMN_WIDTHS, _safe
     wb = Workbook()
     ws = wb.active
     ws.title = "Данные"
@@ -265,7 +265,7 @@ def _build_xlsx(records: list[dict]) -> bytes:
     ws.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNS))}1"
     for row_idx, record in enumerate(records, 2):
         for col_idx, col_name in enumerate(COLUMNS, 1):
-            cell = ws.cell(row=row_idx, column=col_idx, value=record.get(col_name, ''))
+            cell = ws.cell(row=row_idx, column=col_idx, value=_safe(record.get(col_name, '')))
             cell.font = DATA_FONT
             cell.border = THIN_BORDER
             cell.alignment = DATA_ALIGNMENT
