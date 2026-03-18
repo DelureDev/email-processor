@@ -251,6 +251,7 @@ def _record_key(record: dict) -> tuple:
         clean(record.get('№ полиса', '')),
         norm_date(clean(record.get('Начало обслуживания', ''))),
         norm_date(clean(record.get('Конец обслуживания', ''))),
+        clean(record.get('Клиника', '')),
     )
 
 
