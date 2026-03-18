@@ -198,7 +198,7 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
 
     msg.attach(MIMEText(body, 'html', 'utf-8'))
 
-    # Attach daily delta as xlsx + csv
+    # Attach daily delta as xlsx only (CSV goes to network share)
     if new_records:
         date_str = datetime.now().strftime('%Y-%m-%d')
 
@@ -207,13 +207,6 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
         part.set_payload(xlsx_bytes)
         encoders.encode_base64(part)
         part.add_header('Content-Disposition', f'attachment; filename="records_{date_str}.xlsx"')
-        msg.attach(part)
-
-        csv_bytes = _build_csv(new_records)
-        part = MIMEBase('text', 'csv')
-        part.set_payload(csv_bytes)
-        encoders.encode_base64(part)
-        part.add_header('Content-Disposition', f'attachment; filename="records_{date_str}.csv"')
         msg.attach(part)
 
     return msg
