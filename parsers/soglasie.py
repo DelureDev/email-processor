@@ -76,24 +76,26 @@ def parse(filepath: str) -> list[dict]:
     col_polis = find_col(headers, 'полис')
 
     for i in range(header_row + 1, len(df)):
-        familia = get_cell_str(df, i, col_familia)
-        if not familia:
-            continue
-        if any(w in familia.lower() for w in ['итого', 'всего', 'список', 'согласие']):
-            continue
+        try:
+            familia = get_cell_str(df, i, col_familia)
+            if not familia:
+                continue
+            if any(w in familia.lower() for w in ['итого', 'всего', 'список', 'согласие']):
+                continue
 
-        fio = assemble_fio(df, i, col_familia, col_imya, col_otchestvo)
-
-        record = {
-            'ФИО': fio,
-            'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
-            '№ полиса': get_cell_str(df, i, col_polis),
-            'Начало обслуживания': start_date,
-            'Конец обслуживания': end_date,
-            'Страховая компания': 'СК Согласие',
-            'Страхователь': strahovatel,
-        }
-        results.append(record)
+            fio = assemble_fio(df, i, col_familia, col_imya, col_otchestvo)
+            record = {
+                'ФИО': fio.upper(),
+                'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
+                '№ полиса': get_cell_str(df, i, col_polis),
+                'Начало обслуживания': start_date,
+                'Конец обслуживания': end_date,
+                'Страховая компания': 'СК Согласие',
+                'Страхователь': strahovatel,
+            }
+            results.append(record)
+        except Exception as e:
+            logger.warning(f"SOGLASIE: Skipping row {i} due to error: {e}")
 
     logger.info(f"SOGLASIE: parsed {len(results)} records from {filepath}")
     return results

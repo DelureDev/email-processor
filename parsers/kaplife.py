@@ -52,7 +52,7 @@ def parse(filepath: str) -> list[dict]:
                 if any(w in fio.lower() for w in ['контакт-центр', 'руководител', 'исполнител']):
                     continue
                 record = {
-                    'ФИО': fio,
+                    'ФИО': fio.upper(),
                     'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
                     '№ полиса': polis,
                     'Начало обслуживания': format_date(df.iloc[i, col_start]) if col_start is not None else None,
@@ -85,7 +85,7 @@ def parse(filepath: str) -> list[dict]:
                 fio = assemble_fio(df, i, col_familia, col_imya, col_otchestvo)
 
                 record = {
-                    'ФИО': fio,
+                    'ФИО': fio.upper(),
                     'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
                     '№ полиса': get_cell_str(df, i, col_polis),
                     'Начало обслуживания': format_date(df.iloc[i, col_start]) if col_start is not None else None,

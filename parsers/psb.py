@@ -32,24 +32,26 @@ def parse(filepath: str) -> list[dict]:
     col_strahovatel = first_col(headers, ('наименование', 'страхователя'), ('наименование', 'страхователь'), ('страхователь',))
 
     for i in range(header_row + 1, len(df)):
-        familia = get_cell_str(df, i, col_familia)
-        if not familia:
-            continue
-        if any(w in familia.lower() for w in ['исполнител', 'директор', 'подпись', 'начальник', 'специалист']):
-            continue
+        try:
+            familia = get_cell_str(df, i, col_familia)
+            if not familia:
+                continue
+            if any(w in familia.lower() for w in ['исполнител', 'директор', 'подпись', 'начальник', 'специалист']):
+                continue
 
-        fio = assemble_fio(df, i, col_familia, col_imya, col_otchestvo)
-
-        record = {
-            'ФИО': fio,
-            'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
-            '№ полиса': get_cell_str(df, i, col_polis),
-            'Начало обслуживания': format_date(df.iloc[i, col_start]) if col_start is not None else None,
-            'Конец обслуживания': format_date(df.iloc[i, col_end]) if col_end is not None else None,
-            'Страховая компания': 'ПСБ Страхование',
-            'Страхователь': get_cell_str(df, i, col_strahovatel),
-        }
-        results.append(record)
+            fio = assemble_fio(df, i, col_familia, col_imya, col_otchestvo)
+            record = {
+                'ФИО': fio.upper(),
+                'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
+                '№ полиса': get_cell_str(df, i, col_polis),
+                'Начало обслуживания': format_date(df.iloc[i, col_start]) if col_start is not None else None,
+                'Конец обслуживания': format_date(df.iloc[i, col_end]) if col_end is not None else None,
+                'Страховая компания': 'ПСБ Страхование',
+                'Страхователь': get_cell_str(df, i, col_strahovatel),
+            }
+            results.append(record)
+        except Exception as e:
+            logger.warning(f"PSB: Skipping row {i} due to error: {e}")
 
     logger.info(f"PSB: parsed {len(results)} records from {filepath}")
     return results

@@ -51,22 +51,25 @@ def parse(filepath: str) -> list[dict]:
     col_polis = find_col(headers, 'полис')
 
     for i in range(header_row + 1, len(df)):
-        fio = get_cell_str(df, i, col_fio)
-        if not fio:
-            continue
-        if any(w in fio.lower() for w in ['рамках', 'программ', 'руководител', 'исполнител', '*']):
-            continue
+        try:
+            fio = get_cell_str(df, i, col_fio)
+            if not fio:
+                continue
+            if any(w in fio.lower() for w in ['рамках', 'программ', 'руководител', 'исполнител', '*']):
+                continue
 
-        record = {
-            'ФИО': fio,
-            'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
-            '№ полиса': get_cell_str(df, i, col_polis),
-            'Начало обслуживания': start_date,
-            'Конец обслуживания': end_date,
-            'Страховая компания': 'Евроинс',
-            'Страхователь': None,
-        }
-        results.append(record)
+            record = {
+                'ФИО': fio.upper(),
+                'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
+                '№ полиса': get_cell_str(df, i, col_polis),
+                'Начало обслуживания': start_date,
+                'Конец обслуживания': end_date,
+                'Страховая компания': 'Евроинс',
+                'Страхователь': None,
+            }
+            results.append(record)
+        except Exception as e:
+            logger.warning(f"EUROINS: Skipping row {i} due to error: {e}")
 
     logger.info(f"EUROINS: parsed {len(results)} records from {filepath}")
     return results

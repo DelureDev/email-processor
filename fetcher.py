@@ -139,7 +139,7 @@ class IMAPFetcher:
         last_exc = None
         for attempt in range(1, retries + 1):
             try:
-                self.mail = imaplib.IMAP4_SSL(self.server, self.port, ssl_context=ssl.create_default_context())
+                self.mail = imaplib.IMAP4_SSL(self.server, self.port, ssl_context=ssl.create_default_context(), timeout=60)
                 self.mail.login(self.username, self.password)
                 self.mail.select(self.folder)
                 logger.info("Connected successfully")

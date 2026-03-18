@@ -1,6 +1,6 @@
 # Project Status
 
-Current version: **v1.5.1**
+Current version: **v1.6.3**
 
 ---
 
@@ -56,15 +56,15 @@ Current version: **v1.5.1**
 
 | # | File | Issue | Status |
 |---|------|-------|--------|
-| 15 | `clinic_matcher.py` | `_clinics` cache never invalidated | ⬜ |
-| 16 | `clinic_matcher.py:107` | 60-char header guard is arbitrary | ⬜ |
-| 17 | `detector.py:92` | Only first sheet read for format detection | ⬜ |
-| 18 | `fetcher.py:142` | No socket timeout on IMAP — can hang indefinitely | ⬜ |
-| 19 | `fetcher.py:168` | Dead code: `if False` on MOVE command | ⬜ |
-| 20 | `main.py:211` | Redundant import of `extract_policy_comment` | ⬜ |
-| 21 | `notifier.py:278` | `_build_csv()` is dead code | ⬜ |
-| 22 | `parsers/*` | Inconsistent FIO casing — 6 parsers uppercase, 10 don't | ⬜ |
-| 23 | `CLAUDE.md` | Says v1.5.0, code is v1.5.1 | ⬜ |
+| 15 | `clinic_matcher.py` | `_clinics` cache never invalidated | ✅ v1.6.3 |
+| 16 | `clinic_matcher.py:107` | 60-char header guard is arbitrary | ✅ v1.6.3 |
+| 17 | `detector.py:92` | Only first sheet read for format detection | ✅ v1.6.3 |
+| 18 | `fetcher.py:142` | No socket timeout on IMAP — can hang indefinitely | ✅ v1.6.3 |
+| 19 | `fetcher.py:168` | Dead code: `if False` on MOVE command | ✅ v1.6.0 |
+| 20 | `main.py:211` | Redundant import of `extract_policy_comment` | ✅ v1.6.3 |
+| 21 | `notifier.py:278` | `_build_csv()` is dead code | ✅ v1.6.3 |
+| 22 | `parsers/*` | Inconsistent FIO casing — 6 parsers uppercase, 10 don't | ✅ v1.6.3 |
+| 23 | `CLAUDE.md` | Says v1.5.0, code is v1.5.1 | ✅ v1.6.3 |
 
 ---
 

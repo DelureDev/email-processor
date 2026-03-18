@@ -131,7 +131,7 @@ git pull
 
 ## Fix history
 
-All planned work complete as of 2026-03-18. See `PLAN.md` for full version history and `CHANGELOG.md` for per-version details. Current version: **v1.5.0**.
+See `PLAN.md` for full version history and `CHANGELOG.md` for per-version details. Current version: **v1.6.3**.
 
 ## Security hardening
 

@@ -11,6 +11,15 @@ logger = logging.getLogger(__name__)
 
 _clinics: list[dict] | None = None
 
+# Maximum cell length considered a header (not data) in extract_policy_comment
+_MAX_HEADER_LEN = 60
+
+
+def reload_clinics() -> None:
+    """Invalidate the clinic cache. Useful in tests that swap clinics.yaml."""
+    global _clinics
+    _clinics = None
+
 
 def _load_clinics(config_path: str = 'clinics.yaml') -> list[dict]:
     """Load and cache clinics config. Each entry has 'name' and sorted 'keywords' (longest first)."""
@@ -108,7 +117,7 @@ def extract_policy_comment(filepath: str) -> str:
                 row = [str(v).strip().lower() for v in df.iloc[row_idx]]
                 for col_kw in _COMMENT_COLUMNS:
                     for col_idx, cell in enumerate(row):
-                        if col_kw in cell and len(cell) < 60:  # skip long cells — they're data not headers
+                        if col_kw in cell and len(cell) < _MAX_HEADER_LEN:  # skip long cells — they're data not headers
                             # Found the column — scan down for first non-empty data value
                             for data_row in range(row_idx + 1, min(row_idx + 5, len(df))):
                                 val = str(df.iloc[data_row, col_idx]).strip()

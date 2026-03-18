@@ -30,22 +30,25 @@ def parse(filepath: str) -> list[dict]:
     col_strahovatel = find_col(headers, 'страхователь')
 
     for i in range(header_row + 1, len(df)):
-        fio = get_cell_str(df, i, col_fio)
-        if not fio:
-            continue
-        if any(w in fio.lower() for w in ['исполнител', 'директор', 'подпись', 'от  имени']):
-            continue
+        try:
+            fio = get_cell_str(df, i, col_fio)
+            if not fio:
+                continue
+            if any(w in fio.lower() for w in ['исполнител', 'директор', 'подпись', 'от  имени']):
+                continue
 
-        record = {
-            'ФИО': fio,
-            'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
-            '№ полиса': get_cell_str(df, i, col_polis),
-            'Начало обслуживания': format_date(df.iloc[i, col_start]) if col_start is not None else None,
-            'Конец обслуживания': format_date(df.iloc[i, col_otkr]) if col_otkr is not None else None,
-            'Страховая компания': 'РЕСО-Гарантия',
-            'Страхователь': get_cell_str(df, i, col_strahovatel),
-        }
-        results.append(record)
+            record = {
+                'ФИО': fio.upper(),
+                'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
+                '№ полиса': get_cell_str(df, i, col_polis),
+                'Начало обслуживания': format_date(df.iloc[i, col_start]) if col_start is not None else None,
+                'Конец обслуживания': format_date(df.iloc[i, col_otkr]) if col_otkr is not None else None,
+                'Страховая компания': 'РЕСО-Гарантия',
+                'Страхователь': get_cell_str(df, i, col_strahovatel),
+            }
+            results.append(record)
+        except Exception as e:
+            logger.warning(f"RESO: Skipping row {i} due to error: {e}")
 
     logger.info(f"RESO: parsed {len(results)} records from {filepath}")
     return results

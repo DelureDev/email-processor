@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.3] - 2026-03-19
+### Changed / Fixed (Low)
+- **FIO casing**: all 10 parsers that weren't uppercasing FIO now do — consistent `UPPERCASE` in master.xlsx across all 15 parsers
+- **IMAP socket timeout**: 60-second timeout added to `IMAP4_SSL` — prevents indefinite hang on unresponsive server
+- **`_clinics` cache**: added `reload_clinics()` helper to invalidate module-level cache (useful in tests)
+- **Header length guard**: replaced magic `60` with named constant `_MAX_HEADER_LEN` in `clinic_matcher.py`
+- **Detector sheet comment**: added comment explaining why only sheet 0 is scanned for format detection
+- **Redundant import**: removed inline `from clinic_matcher import extract_policy_comment` in `main.py` (already imported at module level)
+- **Dead code**: deleted unused `_build_csv()` function and orphaned `import csv` from `notifier.py`
+- **Dead code (#19)**: `if False` on MOVE command was already removed in v1.6.0 IMAP UID migration — marked resolved
+- **CLAUDE.md version**: updated from v1.5.0 to v1.6.3
+
 ## [1.6.2] - 2026-03-19
 ### Fixed (Medium)
 - **Zetta zip retry**: Zetta zip `message_id` no longer marked processed when extraction fails — failed zips will be retried on the next run (`fetcher.py`)

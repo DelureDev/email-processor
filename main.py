@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.6.2"
+__version__ = "1.6.3"
 
 import os
 import re
@@ -208,7 +208,6 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
     clinic, need_comment = detect_clinic(filepath)
     comment = ''
     if need_comment:
-        from clinic_matcher import extract_policy_comment
         comment = extract_policy_comment(filepath)
     records = [{**r, 'Клиника': clinic, 'Комментарий в полис': comment} for r in records]
 

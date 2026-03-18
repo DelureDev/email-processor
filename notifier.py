@@ -5,7 +5,6 @@ Attaches the master xlsx and includes a summary of what was processed.
 import io
 import os
 import re
-import csv
 import ssl
 import html
 import smtplib
@@ -274,15 +273,6 @@ def _build_xlsx(records: list[dict]) -> bytes:
     wb.save(buf)
     return buf.getvalue()
 
-
-def _build_csv(records: list[dict]) -> bytes:
-    """Build UTF-8 BOM CSV from records list."""
-    columns = ['ФИО', 'Дата рождения', '№ полиса', 'Начало обслуживания', 'Конец обслуживания', 'Страховая компания', 'Страхователь', 'Источник файла', 'Дата обработки']
-    buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=columns, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
-    writer.writeheader()
-    writer.writerows(records)
-    return '\ufeff'.encode('utf-8') + buf.getvalue().encode('utf-8')
 
 
 def _send(smtp_cfg: dict, recipients: list[str], msg: MIMEMultipart) -> None:

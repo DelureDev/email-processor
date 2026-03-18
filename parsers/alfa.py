@@ -99,7 +99,7 @@ def parse(filepath: str) -> list[dict]:
                     strahovatel = group_str
 
             record = {
-                'ФИО': fio,
+                'ФИО': fio.upper(),
                 'Дата рождения': birth,
                 '№ полиса': polis,
                 'Начало обслуживания': start_date,

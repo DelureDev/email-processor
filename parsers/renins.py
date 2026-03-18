@@ -67,31 +67,34 @@ def parse(filepath: str) -> list[dict]:
     col_polis = find_col(headers, 'полис')
 
     for i in range(header_row + 1, len(df)):
-        fio = get_cell_str(df, i, col_fio)
-        if not fio:
-            continue
-        # Skip clinic code rows (short strings like "С532") and footers
-        if len(fio) < 5 or any(w in fio.lower() for w in ['руководител', 'исполнител', 'директор']):
-            continue
-        # Check if it's actually a data row (col 0 should be a number)
-        row_num = df.iloc[i, 0]
-        if pd.isna(row_num):
-            continue
         try:
-            int(float(row_num))
-        except (ValueError, TypeError):
-            continue
+            fio = get_cell_str(df, i, col_fio)
+            if not fio:
+                continue
+            # Skip clinic code rows (short strings like "С532") and footers
+            if len(fio) < 5 or any(w in fio.lower() for w in ['руководител', 'исполнител', 'директор']):
+                continue
+            # Check if it's actually a data row (col 0 should be a number)
+            row_num = df.iloc[i, 0]
+            if pd.isna(row_num):
+                continue
+            try:
+                int(float(row_num))
+            except (ValueError, TypeError):
+                continue
 
-        record = {
-            'ФИО': fio,
-            'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
-            '№ полиса': get_cell_str(df, i, col_polis),
-            'Начало обслуживания': start_date,
-            'Конец обслуживания': end_date,
-            'Страховая компания': 'Ренессанс Страхование',
-            'Страхователь': strahovatel,
-        }
-        results.append(record)
+            record = {
+                'ФИО': fio.upper(),
+                'Дата рождения': format_date(df.iloc[i, col_birth]) if col_birth is not None else None,
+                '№ полиса': get_cell_str(df, i, col_polis),
+                'Начало обслуживания': start_date,
+                'Конец обслуживания': end_date,
+                'Страховая компания': 'Ренессанс Страхование',
+                'Страхователь': strahovatel,
+            }
+            results.append(record)
+        except Exception as e:
+            logger.warning(f"RENINS: Skipping row {i} due to error: {e}")
 
     logger.info(f"RENINS: parsed {len(results)} records from {filepath}")
     return results

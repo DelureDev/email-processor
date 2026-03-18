@@ -89,6 +89,7 @@ def detect_format(filepath: str, sender: str = None) -> str | None:
     # Stage 2: Content-based detection (fallback)
     try:
         with pd.ExcelFile(filepath) as xl:
+            # Sheet 0 only: insurers put their data on the first sheet
             df = xl.parse(sheet_name=xl.sheet_names[0], header=None, nrows=25)
         text_blob = ' '.join(str(v) for v in df.values.flat if pd.notna(v)).lower()
 
