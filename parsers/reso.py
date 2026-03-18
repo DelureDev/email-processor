@@ -6,7 +6,7 @@ Structure: header row at ~row 8 with columns:
 import pandas as pd
 import logging
 
-from parsers.utils import format_date, find_header_row, build_header_map, find_col, get_cell_str
+from parsers.utils import format_date, find_header_row, build_header_map, find_col, first_col, get_cell_str
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ def parse(filepath: str) -> list[dict]:
     col_fio = find_col(headers, 'фио')
     col_birth = find_col(headers, 'дата', 'рожд')
     col_polis = find_col(headers, 'полис')
-    col_otkr = find_col(headers, 'откреплен') or find_col(headers, 'оконч', 'обслуж') or find_col(headers, 'окончан')
+    col_otkr = first_col(headers, ('откреплен',), ('оконч', 'обслуж'), ('окончан',))
     col_start = find_col(headers, 'начало', 'обслуж')
     col_strahovatel = find_col(headers, 'страхователь')
 

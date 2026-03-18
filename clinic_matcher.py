@@ -23,13 +23,18 @@ def _load_clinics(config_path: str = 'clinics.yaml') -> list[dict]:
         return _clinics
     with open(config_path, encoding='utf-8') as f:
         data = yaml.safe_load(f)
-    _clinics = []
+    # Build a flat list of (keyword, clinic_name, extract_comment) sorted globally by keyword length
+    # (longest first) to prevent shorter keywords from matching before more specific longer ones.
+    entries = []
     for entry in data.get('clinics', []):
         name = entry.get('name', '').strip()
-        keywords = sorted(entry.get('keywords', []), key=len, reverse=True)
-        if name and keywords:
-            _clinics.append({'name': name, 'keywords': keywords, 'extract_comment': entry.get('extract_comment', False)})
-    logger.debug(f"Loaded {len(_clinics)} clinics from {config_path}")
+        extract_comment = entry.get('extract_comment', False)
+        for kw in entry.get('keywords', []):
+            if name and kw:
+                entries.append({'name': name, 'keyword': kw.lower(), 'extract_comment': extract_comment})
+    entries.sort(key=lambda e: len(e['keyword']), reverse=True)
+    _clinics = entries
+    logger.debug(f"Loaded {len(_clinics)} clinic keyword entries from {config_path}")
     return _clinics
 
 
@@ -76,11 +81,10 @@ def detect_clinic(filepath: str, config_path: str = 'clinics.yaml') -> tuple[str
     if not text:
         return '⚠️ Не определено', False
 
-    for clinic in clinics:
-        for keyword in clinic['keywords']:
-            if keyword.lower() in text:
-                logger.debug(f"Clinic matched: '{clinic['name']}' via keyword '{keyword}' in {os.path.basename(filepath)}")
-                return clinic['name'], clinic.get('extract_comment', False)
+    for entry in clinics:
+        if entry['keyword'] in text:
+            logger.debug(f"Clinic matched: '{entry['name']}' via keyword '{entry['keyword']}' in {os.path.basename(filepath)}")
+            return entry['name'], entry['extract_comment']
 
     logger.warning(f"No clinic matched for {os.path.basename(filepath)} — setting '⚠️ Не определено'")
     return '⚠️ Не определено', False

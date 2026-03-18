@@ -8,7 +8,7 @@ import pandas as pd
 import re
 import logging
 
-from parsers.utils import format_date, find_header_row, build_header_map, find_col, get_cell_str
+from parsers.utils import format_date, find_header_row, build_header_map, find_col, first_col, get_cell_str
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +64,9 @@ def parse(filepath: str) -> list[dict]:
         return []
 
     headers = build_header_map(df, header_row)
-    col_fio = find_col(headers, 'фио') or find_col(headers, 'фамилия имя') or find_col(headers, 'фамилия')
+    col_fio = first_col(headers, ('фио',), ('фамилия имя',), ('фамилия',))
     col_birth = find_col(headers, 'дата', 'рожд')
-    col_polis = find_col(headers, 'полис') or find_col(headers, 'номер')
+    col_polis = first_col(headers, ('полис',), ('номер',))
 
     for i in range(header_row + 1, len(df)):
         fio = get_cell_str(df, i, col_fio)

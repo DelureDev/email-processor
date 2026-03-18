@@ -11,7 +11,7 @@ class TestRecordKey:
             'Конец обслуживания': '31.12.2026',
         }
         key = _record_key(record)
-        assert key == ('ИВАНОВ ИВАН ИВАНОВИЧ', 'POL-001', '01.01.2026', '31.12.2026')
+        assert key == ('ИВАНОВ ИВАН ИВАНОВИЧ', 'POL-001', '01.01.2026', '31.12.2026', '')
 
     def test_fio_uppercased(self):
         r1 = {'ФИО': 'иванов иван', '№ полиса': '1', 'Начало обслуживания': '', 'Конец обслуживания': ''}
@@ -26,7 +26,7 @@ class TestRecordKey:
             'Конец обслуживания': None,
         }
         key = _record_key(record)
-        assert key == ('TEST', '', '', '')
+        assert key == ('TEST', '', '', '', '')
 
     def test_nan_cleaned(self):
         record = {
@@ -36,7 +36,7 @@ class TestRecordKey:
             'Конец обслуживания': 'NaT',
         }
         key = _record_key(record)
-        assert key == ('TEST', '', '', '')
+        assert key == ('TEST', '', '', '', '')
 
     def test_different_records_different_keys(self):
         r1 = {'ФИО': 'Иванов', '№ полиса': '001', 'Начало обслуживания': '01.01.2026', 'Конец обслуживания': ''}

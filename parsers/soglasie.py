@@ -11,7 +11,7 @@ import pandas as pd
 import re
 import logging
 
-from parsers.utils import format_date, find_header_row, build_header_map, find_col, get_cell_str, assemble_fio
+from parsers.utils import format_date, find_header_row, build_header_map, find_col, first_col, get_cell_str, assemble_fio
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ def parse(filepath: str) -> list[dict]:
     col_familia = find_col(headers, 'фамилия')
     col_imya = find_col(headers, 'имя')
     col_otchestvo = find_col(headers, 'отчество')
-    col_birth = find_col(headers, 'д/р') or find_col(headers, 'дата', 'рожд')
+    col_birth = first_col(headers, ('д/р',), ('дата', 'рожд'))
     col_polis = find_col(headers, 'полис')
 
     for i in range(header_row + 1, len(df)):

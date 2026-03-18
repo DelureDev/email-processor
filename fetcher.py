@@ -157,24 +157,20 @@ class IMAPFetcher:
         except Exception:
             pass
 
-    def move_to_folder(self, imap_ids: list[str], dest_folder: str) -> None:
-        """Move emails (by IMAP sequence number) to dest_folder. Uses COPY + DELETE + EXPUNGE."""
-        if not imap_ids or not dest_folder:
+    def move_to_folder(self, imap_uids: list[str], dest_folder: str) -> None:
+        """Move emails (by stable IMAP UID) to dest_folder. Uses UID COPY + UID STORE + EXPUNGE."""
+        if not imap_uids or not dest_folder:
             return
-        unique_ids = list(dict.fromkeys(imap_ids))  # deduplicate, preserve order
-        id_set = ','.join(unique_ids)
+        unique_uids = list(dict.fromkeys(imap_uids))  # deduplicate, preserve order
+        uid_set = ','.join(unique_uids)
         try:
-            # Try RFC 6851 MOVE first (more efficient)
-            status, _ = self.mail.uid('MOVE', id_set, dest_folder) if False else ('NO', None)
-            if status != 'OK':
-                # Fallback: COPY + STORE \Deleted + EXPUNGE
-                status, _ = self.mail.copy(id_set, dest_folder)
-                if status == 'OK':
-                    self.mail.store(id_set, '+FLAGS', '\\Deleted')
-                    self.mail.expunge()
-                    logger.info(f"Moved {len(unique_ids)} emails to '{dest_folder}'")
-                else:
-                    logger.warning(f"Failed to copy emails to '{dest_folder}': {status}")
+            status, _ = self.mail.uid('COPY', uid_set, dest_folder)
+            if status == 'OK':
+                self.mail.uid('STORE', uid_set, '+FLAGS', '\\Deleted')
+                self.mail.expunge()
+                logger.info(f"Moved {len(unique_uids)} emails to '{dest_folder}'")
+            else:
+                logger.warning(f"Failed to copy emails to '{dest_folder}': {status}")
         except Exception as e:
             logger.error(f"Error moving emails to '{dest_folder}': {e}")
 
@@ -209,13 +205,13 @@ class IMAPFetcher:
 
         # Pre-scan: search for Zetta monthly password (go back 35 days to catch 1st-of-month email)
         pwd_since = _imap_date(datetime.now() - timedelta(days=35))
-        status, pwd_msgs = self.mail.search(None, f'(SINCE {pwd_since} FROM "parollpu@zettains.ru")')
+        status, pwd_msgs = self.mail.uid('SEARCH', None, f'(SINCE {pwd_since} FROM "parollpu@zettains.ru")')
         if status == 'OK' and pwd_msgs[0]:
-            for msg_id in pwd_msgs[0].split():
+            for uid in pwd_msgs[0].split():
                 try:
                     msg_data = None
                     for attempt in range(1, 4):
-                        st, data = self.mail.fetch(msg_id, '(RFC822)')
+                        st, data = self.mail.uid('FETCH', uid, '(RFC822)')
                         if st == 'OK':
                             msg_data = data
                             break
@@ -232,26 +228,26 @@ class IMAPFetcher:
 
         # Main search for recent emails
         since_date = _imap_date(datetime.now() - timedelta(days=days_back))
-        status, messages = self.mail.search(None, f'(SINCE {since_date})')
+        status, messages = self.mail.uid('SEARCH', None, f'(SINCE {since_date})')
 
         if status != 'OK':
             logger.error("Failed to search emails")
             return []
 
-        msg_ids = messages[0].split()
-        logger.info(f"Found {len(msg_ids)} emails in last {days_back} days")
+        msg_uids = messages[0].split()
+        logger.info(f"Found {len(msg_uids)} emails in last {days_back} days")
 
         # First pass: collect all attachments and passwords
-        for msg_id in msg_ids:
-            msg_id_str = msg_id.decode()
+        for uid in msg_uids:
+            msg_id_str = uid.decode()
 
             msg_data = None
             for attempt in range(1, 4):
-                status, data = self.mail.fetch(msg_id, '(RFC822)')
+                status, data = self.mail.uid('FETCH', uid, '(RFC822)')
                 if status == 'OK':
                     msg_data = data
                     break
-                logger.warning(f"Fetch attempt {attempt} failed for msg {msg_id_str}, retrying...")
+                logger.warning(f"Fetch attempt {attempt} failed for UID {msg_id_str}, retrying...")
                 time.sleep(2)
             if msg_data is None:
                 logger.error(f"Skipping message {msg_id_str} after 3 failed fetch attempts")
@@ -293,6 +289,8 @@ class IMAPFetcher:
                         ct = part.get_content_type()
                         if ct == 'text/plain':
                             payload = part.get_payload(decode=True)
+                            if payload is None:
+                                continue
                             charset = part.get_content_charset() or 'utf-8'
                             body = payload.decode(charset, errors='replace')
                             pwd = extract_password_from_body(body)
@@ -300,6 +298,8 @@ class IMAPFetcher:
                                 zetta_passwords.append(pwd)
                         elif ct == 'text/html':
                             payload = part.get_payload(decode=True)
+                            if payload is None:
+                                continue
                             charset = part.get_content_charset() or 'utf-8'
                             body = payload.decode(charset, errors='replace')
                             pwd = extract_password_from_html(body)
@@ -357,7 +357,7 @@ class IMAPFetcher:
                         'imap_id': msg_id_str,
                     })
 
-            # Mark as processed (Message-ID only — IMAP sequence numbers are not stable)
+            # Mark as seen in memory — persisted to SQLite by caller after successful processing
             self.processed_ids.add(message_id)
 
         # Second pass: extract Zetta zips using collected passwords
@@ -385,9 +385,5 @@ class IMAPFetcher:
         elif zetta_zips and not zetta_passwords:
             logger.warning(f"Found {len(zetta_zips)} Zetta zips but no passwords!")
 
-        if not self.dry_run:
-            self._save_processed_ids()
-        else:
-            logger.info("Dry-run: not saving processed IDs")
         logger.info(f"Downloaded {len(results)} new attachments")
         return results

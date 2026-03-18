@@ -50,6 +50,21 @@ def find_col(headers: dict[str, int], *keywords: str) -> int | None:
     return None
 
 
+def first_col(headers: dict[str, int], *keyword_sets) -> int | None:
+    """Try keyword sets in order, return first non-None column index found.
+
+    Replaces `find_col(...) or find_col(...)` chains which silently fail
+    when the correct column is at index 0 (falsy in Python).
+
+    Usage: first_col(headers, ('фио',), ('фамилия', 'имя'))
+    """
+    for kws in keyword_sets:
+        result = find_col(headers, *kws)
+        if result is not None:
+            return result
+    return None
+
+
 def assemble_fio(df, row_idx: int, col_familia: int,
                  col_imya: int | None = None,
                  col_otch: int | None = None) -> str:

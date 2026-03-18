@@ -6,7 +6,7 @@ Header at row ~6: № п/п | полис | фамилия | имя | отчес�
 import pandas as pd
 import logging
 
-from parsers.utils import format_date, find_header_row, build_header_map, find_col, get_cell_str, assemble_fio
+from parsers.utils import format_date, find_header_row, build_header_map, find_col, first_col, get_cell_str, assemble_fio
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ def parse(filepath: str) -> list[dict]:
     col_polis = find_col(headers, 'полис')
     col_start = find_col(headers, 'дата', 'прикрепл')
     col_end = find_col(headers, 'дата', 'откреп')
-    col_strahovatel = find_col(headers, 'наименование', 'страхователя') or find_col(headers, 'наименование', 'страхователь') or find_col(headers, 'страхователь')
+    col_strahovatel = first_col(headers, ('наименование', 'страхователя'), ('наименование', 'страхователь'), ('страхователь',))
 
     for i in range(header_row + 1, len(df)):
         familia = get_cell_str(df, i, col_familia)

@@ -13,7 +13,7 @@ import pandas as pd
 import logging
 import re
 
-from parsers.utils import format_date, find_header_row, build_header_map, find_col, get_cell_str, assemble_fio
+from parsers.utils import format_date, find_header_row, build_header_map, find_col, first_col, get_cell_str, assemble_fio
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def parse(filepath: str) -> list[dict]:
     col_familia = find_col(headers, 'фамилия')
     col_imya = find_col(headers, 'имя')
     col_otch = find_col(headers, 'отчество')
-    col_birth = find_col(headers, 'д.рожд') or find_col(headers, 'дата', 'рожд')
+    col_birth = first_col(headers, ('д.рожд',), ('дата', 'рожд'))
     col_polis = find_col(headers, 'полис')
     col_prikr = find_col(headers, 'дата', 'прикрепл')
     col_otkr = find_col(headers, 'дата', 'откреплен')

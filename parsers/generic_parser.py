@@ -11,7 +11,7 @@ import pandas as pd
 import re
 import logging
 
-from parsers.utils import format_date, build_header_map, find_col, get_cell_str, assemble_fio
+from parsers.utils import format_date, build_header_map, find_col, first_col, get_cell_str, assemble_fio
 
 logger = logging.getLogger(__name__)
 
@@ -88,12 +88,12 @@ def parse(filepath: str) -> list[dict]:
     col_otch = find_col(headers, 'отчество')
 
     # Other columns
-    col_birth = find_col(headers, 'д/р') or find_col(headers, 'д.рожд') or find_col(headers, 'дата', 'рожд')
+    col_birth = first_col(headers, ('д/р',), ('д.рожд',), ('дата', 'рожд'))
     col_polis = find_col(headers, 'полис')
-    col_start = find_col(headers, 'дата', 'прикрепл') or find_col(headers, 'дата', 'начал') or find_col(headers, 'начало')
-    col_end = find_col(headers, 'дата', 'откреплен') or find_col(headers, 'дата', 'оконч') or find_col(headers, 'последний') or find_col(headers, 'конец')
+    col_start = first_col(headers, ('дата', 'прикрепл'), ('дата', 'начал'), ('начало',))
+    col_end = first_col(headers, ('дата', 'откреплен'), ('дата', 'оконч'), ('последний',), ('конец',))
     col_company = find_col(headers, 'страхов', 'компан')
-    col_work = find_col(headers, 'место', 'работ') or find_col(headers, 'страхователь')
+    col_work = first_col(headers, ('место', 'работ'), ('страхователь',))
 
     for i in range(header_row + 1, len(df)):
         if has_split_fio:

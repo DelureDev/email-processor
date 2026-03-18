@@ -65,7 +65,7 @@ class TestLoadExistingKeys:
         write_to_master([_make_record()], path, source_filename="test.xlsx")
         keys = load_existing_keys(path)
         assert len(keys) == 1
-        assert ('ТЕСТОВ ТЕСТ ТЕСТОВИЧ', 'POL-001', '01.01.2026', '31.12.2026') in keys
+        assert ('ТЕСТОВ ТЕСТ ТЕСТОВИЧ', 'POL-001', '01.01.2026', '31.12.2026', '') in keys
 
     def test_dedup_works(self, tmp_path):
         path = str(tmp_path / "master.xlsx")
@@ -75,7 +75,7 @@ class TestLoadExistingKeys:
         write_to_master([r1], path, source_filename="a.xlsx")
         keys = load_existing_keys(path)
         # r2 should match existing key, r3 should not
-        key2 = ('ТЕСТОВ ТЕСТ ТЕСТОВИЧ', 'POL-001', '01.01.2026', '31.12.2026')
-        key3 = ('ДРУГОЙ ЧЕЛОВЕК', 'POL-001', '01.01.2026', '31.12.2026')
+        key2 = ('ТЕСТОВ ТЕСТ ТЕСТОВИЧ', 'POL-001', '01.01.2026', '31.12.2026', '')
+        key3 = ('ДРУГОЙ ЧЕЛОВЕК', 'POL-001', '01.01.2026', '31.12.2026', '')
         assert key2 in keys
         assert key3 not in keys

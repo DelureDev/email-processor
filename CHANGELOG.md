@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.6.0] - 2026-03-19
+### Fixed (Critical)
+- **IMAP UIDs**: all IMAP operations now use stable UIDs (`uid('SEARCH'/'FETCH'/'COPY'/'STORE')`) instead of volatile sequence numbers — prevents moving/deleting wrong emails
+- **Processed IDs timing**: `_save_processed_ids()` moved from `fetch_attachments()` to `main.py` after successful batch write — emails can now be retried on crash
+- **`find_col() or find_col()` column-zero bug**: added `first_col()` helper to `parsers/utils.py` and replaced all `or`-chained `find_col()` calls in 11 parsers — column at index 0 no longer silently falls through
+- **Clinic keyword global sort**: `clinic_matcher.py` now builds a flat keyword list sorted globally by length (longest first) — cross-clinic partial matches no longer depend on YAML file order
+### Fixed (Medium)
+- **Password extraction crash**: added `if payload is None: continue` guard in per-email password extraction (`fetcher.py`) — malformed emails no longer crash the fetch loop
+### Fixed (Tests)
+- Updated `test_dedup.py` and `test_writer.py` to use 5-tuple dedup keys (including `Клиника` field added in v1.4.1)
+
 ## [1.5.1] - 2026-03-18
 ### Added
 - Track `unmatched_clinics` and `missing_comments` in stats dict

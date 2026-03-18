@@ -18,7 +18,12 @@
       "Bash(C:/Python311/python.exe --version)",
       "Bash(xargs grep:*)",
       "Bash(xargs -0 grep -l \"nzgwqdufoobicxcw\\\\|fantasyclinic\\\\|sikachev\\\\|10\\\\.10\\\\.\\(10|88\\)\")",
-      "Bash(pip show:*)"
+      "Bash(pip show:*)",
+      "Bash(py -c \":*)",
+      "Bash(grep:*)",
+      "Bash(for f:*)",
+      "Bash(do sed:*)",
+      "Bash(done)"
     ]
   }
 }

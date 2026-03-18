@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.5.1"
+__version__ = "1.6.0"
 
 import os
 import re
@@ -432,6 +432,9 @@ def run_imap_mode(config: dict, dry_run: bool = False):
             dest = config.get('imap', {}).get('processed_folder', '').strip()
             if dest and processed_imap_ids:
                 fetcher.move_to_folder(processed_imap_ids, dest)
+            fetcher._save_processed_ids()
+        else:
+            logger.info("Dry-run: not saving processed IDs")
         fetcher.disconnect()
 
     if pending and not dry_run:

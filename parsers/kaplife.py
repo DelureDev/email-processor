@@ -8,7 +8,7 @@ Two types:
 import pandas as pd
 import logging
 
-from parsers.utils import format_date, find_header_row, build_header_map, find_col, get_cell_str, assemble_fio
+from parsers.utils import format_date, find_header_row, build_header_map, find_col, first_col, get_cell_str, assemble_fio
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ def parse(filepath: str) -> list[dict]:
 
     if is_change_format:
         # ИзменениеФЛ format: ФИО is combined in "Ф.И.О. (Новая)" column
-        col_fio_new = find_col(headers, 'ф.и.о', 'новая') or find_col(headers, 'ф.и.о')
+        col_fio_new = first_col(headers, ('ф.и.о', 'новая'), ('ф.и.о',))
         col_birth = find_col(headers, 'дата', 'рожд')
         col_polis = find_col(headers, 'полис')
         col_start = find_col(headers, 'дата', 'прикрепл')
