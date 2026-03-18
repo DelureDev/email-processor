@@ -28,7 +28,7 @@ from functools import lru_cache
 from detector import detect_format
 from parsers import PARSERS
 from writer import write_to_master, write_batch_to_master, load_existing_keys
-from clinic_matcher import detect_clinic
+from clinic_matcher import detect_clinic, extract_policy_comment
 
 
 def setup_logging(config: dict) -> None:
@@ -205,8 +205,12 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
         return 0
 
     # Detect clinic (once per file) and inject into all records
-    clinic = detect_clinic(filepath)
-    records = [{**r, 'Клиника': clinic} for r in records]
+    clinic, need_comment = detect_clinic(filepath)
+    comment = ''
+    if need_comment:
+        from clinic_matcher import extract_policy_comment
+        comment = extract_policy_comment(filepath)
+    records = [{**r, 'Клиника': clinic, 'Комментарий в полис': comment} for r in records]
 
     # Track stats
     stats['files_processed'] += 1
@@ -522,9 +526,12 @@ def run_test_mode(folder: str, config: dict):
             print(f"⚠  EMPTY: {filename} (format: {fmt})")
             continue
 
-        clinic = detect_clinic(filepath)
+        clinic, need_comment = detect_clinic(filepath)
+        comment = extract_policy_comment(filepath) if need_comment else ''
         total += len(records)
         print(f"✅ {fmt.upper():12s} | {len(records):3d} records | {filename} | 🏥 {clinic}")
+        if comment:
+            print(f"   💬 {comment[:80]}")
         for r in records[:3]:  # show first 3
             fio = (r.get('ФИО') or '')[:35]
             polis = (r.get('№ полиса') or '')[:20]

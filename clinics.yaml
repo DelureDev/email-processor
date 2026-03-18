@@ -31,6 +31,7 @@ clinics:
       - "Клиника Фэнтези"
 
   - name: "Гарибальди 36"
+    extract_comment: true      # extract Комментарий в полис for this clinic
     keywords:
       - "Детская клиника"
 
