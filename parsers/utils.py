@@ -81,6 +81,36 @@ def assemble_fio(df, row_idx: int, col_familia: int,
     return ' '.join(parts)
 
 
+def clean_dedup_val(val) -> str:
+    """Clean a value for dedup key: strip, handle nan/None/NaT."""
+    s = str(val).strip() if val is not None else ''
+    return '' if s in ('nan', 'None', 'NaT') else s
+
+
+def norm_date_pad(s: str) -> str:
+    """Zero-pad date components: 1.1.2020 → 01.01.2020."""
+    parts = s.split('.')
+    if len(parts) == 3:
+        try:
+            return f"{int(parts[0]):02d}.{int(parts[1]):02d}.{parts[2]}"
+        except ValueError:
+            pass
+    return s
+
+
+def record_key(record: dict) -> tuple:
+    """Create deduplication key from record.
+    Key: (ФИО normalized, полис, начало, конец, клиника).
+    """
+    return (
+        clean_dedup_val(record.get('ФИО', '')).upper().replace('Ё', 'Е'),
+        clean_dedup_val(record.get('№ полиса', '')),
+        norm_date_pad(clean_dedup_val(record.get('Начало обслуживания', ''))),
+        norm_date_pad(clean_dedup_val(record.get('Конец обслуживания', ''))),
+        clean_dedup_val(record.get('Клиника', '')),
+    )
+
+
 def get_cell_str(df, row_idx: int, col_idx: int | None) -> str | None:
     """Safely get a stripped string from a cell, or None.
     Converts whole-number floats (e.g. 123456.0) to int strings (123456).

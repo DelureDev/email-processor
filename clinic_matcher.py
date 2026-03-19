@@ -53,7 +53,7 @@ def _file_to_text(filepath: str) -> str:
         with pd.ExcelFile(filepath) as xl:
             parts = []
             for sheet in xl.sheet_names:
-                df = pd.read_excel(xl, sheet_name=sheet, header=None, dtype=str)
+                df = pd.read_excel(xl, sheet_name=sheet, header=None, dtype=str, nrows=50)
                 parts.append(df.fillna('').to_string())
         return ' '.join(parts).lower()
     except Exception as e:

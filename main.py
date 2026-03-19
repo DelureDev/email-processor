@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.8.3"
+__version__ = "1.8.4"
 
 import os
 import re
@@ -27,6 +27,7 @@ from functools import lru_cache
 
 from detector import detect_format
 from parsers import PARSERS
+from parsers.utils import record_key, clean_dedup_val, norm_date_pad
 from writer import write_to_master, write_batch_to_master, load_existing_keys
 from clinic_matcher import detect_clinic, extract_policy_comment
 
@@ -60,7 +61,14 @@ def setup_logging(config: dict) -> None:
 def _expand_env(obj):
     """Recursively expand ${VAR_NAME} placeholders in config values."""
     if isinstance(obj, str):
-        return re.sub(r'\$\{(\w+)\}', lambda m: os.environ.get(m.group(1), m.group(0)), obj)
+        def _replace(m):
+            name = m.group(1)
+            val = os.environ.get(name)
+            if val is None:
+                logging.getLogger(__name__).warning(f"Environment variable ${{{name}}} is not set — using literal placeholder")
+                return m.group(0)
+            return val
+        return re.sub(r'\$\{(\w+)\}', _replace, obj)
     if isinstance(obj, dict):
         return {k: _expand_env(v) for k, v in obj.items()}
     if isinstance(obj, list):
@@ -261,28 +269,8 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
 
 
 def _record_key(record: dict) -> tuple:
-    """Create deduplication key from record."""
-    def clean(val):
-        s = str(val).strip() if val is not None else ''
-        return '' if s == 'nan' or s == 'None' or s == 'NaT' else s
-
-    def norm_date(s: str) -> str:
-        """Zero-pad date: 1.1.2020 → 01.01.2020."""
-        parts = s.split('.')
-        if len(parts) == 3:
-            try:
-                return f"{int(parts[0]):02d}.{int(parts[1]):02d}.{parts[2]}"
-            except ValueError:
-                pass
-        return s
-
-    return (
-        clean(record.get('ФИО', '')).upper().replace('Ё', 'Е'),
-        clean(record.get('№ полиса', '')),
-        norm_date(clean(record.get('Начало обслуживания', ''))),
-        norm_date(clean(record.get('Конец обслуживания', ''))),
-        clean(record.get('Клиника', '')),
-    )
+    """Create deduplication key from record. Delegates to shared parsers.utils.record_key."""
+    return record_key(record)
 
 
 def make_stats() -> dict:
@@ -321,16 +309,7 @@ def _attach_monthly_if_last_day(config: dict, stats: dict) -> None:
         # Zero-padded month suffix: matches end of DD.MM.YYYY (e.g. "03.2026")
         month_suffix = f"{today.month:02d}.{today.year}"
         if 'Дата обработки' in df.columns:
-            # Normalize dates before matching: "1.3.2026" → "01.03.2026"
-            def _norm(s):
-                parts = str(s).split('.')
-                if len(parts) == 3:
-                    try:
-                        return f"{int(parts[0]):02d}.{int(parts[1]):02d}.{parts[2]}"
-                    except ValueError:
-                        pass
-                return str(s)
-            normed = df['Дата обработки'].map(_norm)
+            normed = df['Дата обработки'].map(lambda s: norm_date_pad(str(s)))
             mask = normed.str.endswith(month_suffix, na=False)
             monthly = df[mask].to_dict('records')
         else:
@@ -347,7 +326,7 @@ def _export_to_network(config: dict, stats: dict) -> None:
     if not folder or not stats.get('new_records'):
         return
     logger = logging.getLogger(__name__)
-    import csv as csv_mod
+    import csv
     from writer import COLUMNS, _safe
 
     now = datetime.now()
@@ -360,7 +339,7 @@ def _export_to_network(config: dict, stats: dict) -> None:
         write_header = not os.path.exists(daily_dest)
         encoding = 'utf-8-sig' if write_header else 'utf-8'
         with open(daily_dest, 'a', newline='', encoding=encoding) as f:
-            w = csv_mod.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
+            w = csv.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
             if write_header:
                 w.writeheader()
             for record in records:
@@ -376,7 +355,7 @@ def _export_to_network(config: dict, stats: dict) -> None:
         write_header = not os.path.exists(monthly_dest)
         encoding = 'utf-8-sig' if write_header else 'utf-8'
         with open(monthly_dest, 'a', newline='', encoding=encoding) as f:
-            w = csv_mod.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
+            w = csv.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
             if write_header:
                 w.writeheader()
             for record in records:
@@ -390,6 +369,9 @@ def _ping_healthcheck(config: dict, stats: dict) -> None:
     """Ping healthchecks.io (or compatible) URL to confirm cron is alive."""
     url = config.get('healthcheck_url', '').strip()
     if not url:
+        return
+    if not url.startswith('https://'):
+        logging.getLogger(__name__).warning(f"Healthcheck URL must start with https:// — skipping: {url[:50]}")
         return
     logger = logging.getLogger(__name__)
     body = (

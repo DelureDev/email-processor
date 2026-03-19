@@ -209,10 +209,10 @@ def try_passwords(zip_path: str, passwords: list[str], extract_to: str) -> list[
         logger.error(f"Cannot read zip {zip_path}: {e}")
         return []
 
-    for pwd in passwords:
+    for pwd_idx, pwd in enumerate(passwords, 1):
         result = unzip_with_password(zip_path, pwd, extract_to)
         if result:
-            audit_logger.info(f"ZIP_EXTRACT zip={os.path.basename(zip_path)} passwords_tried={passwords.index(pwd)+1}/{len(passwords)} result=SUCCESS")
+            audit_logger.info(f"ZIP_EXTRACT zip={os.path.basename(zip_path)} passwords_tried={pwd_idx}/{len(passwords)} result=SUCCESS")
             return result
 
     audit_logger.info(f"ZIP_EXTRACT zip={os.path.basename(zip_path)} passwords_tried={len(passwords)}/{len(passwords)} result=FAILED")

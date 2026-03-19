@@ -11,6 +11,7 @@ from openpyxl.utils import get_column_letter
 from contextlib import contextmanager
 from datetime import datetime
 import logging
+from parsers.utils import clean_dedup_val, norm_date_pad
 
 logger = logging.getLogger(__name__)
 
@@ -47,24 +48,11 @@ def load_existing_keys(master_path: str) -> set:
         if 'Клиника' not in df.columns:
             df['Клиника'] = ''
 
-        def _clean(s):
-            s = str(s).strip()
-            return '' if s in ('nan', 'None', 'NaT') else s
-
-        def _norm_date(s: str) -> str:
-            parts = s.split('.')
-            if len(parts) == 3:
-                try:
-                    return f"{int(parts[0]):02d}.{int(parts[1]):02d}.{parts[2]}"
-                except ValueError:
-                    pass
-            return s
-
         for col in available:
-            df[col] = df[col].map(_clean)
+            df[col] = df[col].map(lambda v: clean_dedup_val(v))
         df['ФИО'] = df['ФИО'].str.upper().str.replace('Ё', 'Е', regex=False)
         for col in ['Начало обслуживания', 'Конец обслуживания']:
-            df[col] = df[col].map(_norm_date)
+            df[col] = df[col].map(norm_date_pad)
 
         keys = set(zip(df['ФИО'], df['№ полиса'], df['Начало обслуживания'], df['Конец обслуживания'], df['Клиника']))
     except Exception as e:
@@ -189,35 +177,50 @@ def _safe(value) -> object:
     return value
 
 
+def _populate_styled_worksheet(ws, records: list[dict]):
+    """Populate a worksheet with styled headers and data rows."""
+    for col_idx, col_name in enumerate(COLUMNS, 1):
+        cell = ws.cell(row=1, column=col_idx, value=col_name)
+        cell.font = HEADER_FONT
+        cell.fill = HEADER_FILL
+        cell.alignment = HEADER_ALIGNMENT
+        cell.border = THIN_BORDER
+        ws.column_dimensions[get_column_letter(col_idx)].width = COLUMN_WIDTHS.get(col_name, 20)
+
+    ws.row_dimensions[1].height = 30
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNS))}1"
+
+    for row_idx, record in enumerate(records, 2):
+        for col_idx, col_name in enumerate(COLUMNS, 1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=_safe(record.get(col_name, '')))
+            cell.font = DATA_FONT
+            cell.border = THIN_BORDER
+            cell.alignment = DATA_ALIGNMENT
+
+    ws.freeze_panes = 'A2'
+
+
+def build_styled_xlsx_bytes(records: list[dict]) -> bytes:
+    """Build styled xlsx from records list, returns bytes. Used by notifier."""
+    import io
+    wb = Workbook()
+    try:
+        ws = wb.active
+        ws.title = "Данные"
+        _populate_styled_worksheet(ws, records)
+        buf = io.BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+    finally:
+        wb.close()
+
+
 def _create_new(records: list[dict], path: str):
     wb = Workbook()
     try:
         ws = wb.active
         ws.title = "Данные"
-
-        # Header
-        for col_idx, col_name in enumerate(COLUMNS, 1):
-            cell = ws.cell(row=1, column=col_idx, value=col_name)
-            cell.font = HEADER_FONT
-            cell.fill = HEADER_FILL
-            cell.alignment = HEADER_ALIGNMENT
-            cell.border = THIN_BORDER
-            ws.column_dimensions[get_column_letter(col_idx)].width = COLUMN_WIDTHS.get(col_name, 20)
-
-        ws.row_dimensions[1].height = 30
-        ws.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNS))}1"
-
-        # Data
-        for row_idx, record in enumerate(records, 2):
-            for col_idx, col_name in enumerate(COLUMNS, 1):
-                cell = ws.cell(row=row_idx, column=col_idx, value=_safe(record.get(col_name, '')))
-                cell.font = DATA_FONT
-                cell.border = THIN_BORDER
-                cell.alignment = DATA_ALIGNMENT
-
-        # Freeze header
-        ws.freeze_panes = 'A2'
-
+        _populate_styled_worksheet(ws, records)
         wb.save(path)
     finally:
         wb.close()
@@ -229,6 +232,11 @@ def _append_to_existing(records: list[dict], path: str):
         if 'Данные' not in wb.sheetnames:
             raise ValueError(f"Sheet 'Данные' not found in {path}. Available sheets: {wb.sheetnames}")
         ws = wb['Данные']
+
+        # Validate column order matches expected COLUMNS
+        existing_headers = [ws.cell(row=1, column=c).value for c in range(1, len(COLUMNS) + 1)]
+        if existing_headers != COLUMNS:
+            logger.warning(f"Column mismatch in {path}: expected {COLUMNS}, got {existing_headers}")
 
         # Find actual last data row (max_row may include empty styled rows)
         next_row = ws.max_row + 1

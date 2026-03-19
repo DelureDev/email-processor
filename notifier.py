@@ -2,7 +2,6 @@
 Email Notifier — sends processing reports via SMTP.
 Attaches the master xlsx and includes a summary of what was processed.
 """
-import io
 import os
 import re
 import ssl
@@ -14,9 +13,6 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from datetime import datetime
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
 
 logger = logging.getLogger(__name__)
 
@@ -249,32 +245,8 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
 
 def _build_xlsx(records: list[dict]) -> bytes:
     """Build styled xlsx from records list, returns bytes."""
-    from writer import COLUMNS, HEADER_FONT, HEADER_FILL, HEADER_ALIGNMENT, DATA_FONT, DATA_ALIGNMENT, THIN_BORDER, COLUMN_WIDTHS, _safe
-    wb = Workbook()
-    try:
-        ws = wb.active
-        ws.title = "Данные"
-        for col_idx, col_name in enumerate(COLUMNS, 1):
-            cell = ws.cell(row=1, column=col_idx, value=col_name)
-            cell.font = HEADER_FONT
-            cell.fill = HEADER_FILL
-            cell.alignment = HEADER_ALIGNMENT
-            cell.border = THIN_BORDER
-            ws.column_dimensions[get_column_letter(col_idx)].width = COLUMN_WIDTHS.get(col_name, 20)
-        ws.row_dimensions[1].height = 30
-        ws.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNS))}1"
-        for row_idx, record in enumerate(records, 2):
-            for col_idx, col_name in enumerate(COLUMNS, 1):
-                cell = ws.cell(row=row_idx, column=col_idx, value=_safe(record.get(col_name, '')))
-                cell.font = DATA_FONT
-                cell.border = THIN_BORDER
-                cell.alignment = DATA_ALIGNMENT
-        ws.freeze_panes = 'A2'
-        buf = io.BytesIO()
-        wb.save(buf)
-        return buf.getvalue()
-    finally:
-        wb.close()
+    from writer import build_styled_xlsx_bytes
+    return build_styled_xlsx_bytes(records)
 
 
 

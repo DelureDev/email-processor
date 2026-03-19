@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.8.4] - 2026-03-19
+### Fixed (Refactoring — audit follow-up)
+- **Shared dedup key (#69/#78)**: extracted `record_key()`, `clean_dedup_val()`, `norm_date_pad()` to `parsers/utils.py` — eliminates 3x duplication across `main.py` and `writer.py`; single source of truth for dedup logic
+- **Shared xlsx builder (#79)**: extracted `build_styled_xlsx_bytes()` to `writer.py`, `notifier.py:_build_xlsx()` now delegates to it — eliminates duplicated styled xlsx creation code
+- **Column order validation (#77)**: `_append_to_existing()` now validates that the existing master file's headers match expected `COLUMNS` order and logs a warning on mismatch
+- **`passwords.index()` → `enumerate()` (#66)**: `zetta_handler.py:try_passwords()` no longer uses O(n) list scan for audit log
+- **`csv_mod` alias (#82)**: removed unnecessary `import csv as csv_mod` in `_export_to_network()`
+
+### Security
+- **Env var warning (#75)**: `_expand_env()` now logs a warning when a `${VAR}` placeholder has no matching environment variable — previously silent passthrough
+- **Healthcheck URL validation (#76)**: `_ping_healthcheck()` now requires `https://` scheme — blocks potential SSRF via config tampering
+- **Clinic matcher memory (#80)**: `_file_to_text()` now reads max 50 rows per sheet instead of entire xlsx — prevents memory exhaustion on large files
+
+### Changed
+- **Unused imports removed**: `openpyxl`, `io` imports removed from `notifier.py` (now delegated to `writer.py`)
+
 ## [1.8.3] - 2026-03-19
 ### Security
 - **`diagnostic.py` env var expansion**: config now expands `${VAR}` placeholders — previously used literal strings, which could encourage putting plaintext passwords in config

@@ -1,6 +1,6 @@
 # Project Status
 
-Current version: **v1.8.3** | Tests: **103** (87 pass, 16 fixture-dependent skip)
+Current version: **v1.8.4** | Tests: **103** (87 pass, 16 fixture-dependent skip)
 
 ---
 
@@ -19,6 +19,7 @@ Current version: **v1.8.3** | Tests: **103** (87 pass, 16 fixture-dependent skip
 | v1.7.0–1.7.1 | 2026-03-19 | Code review v2 fixes: cross-run dedup, network CSV `_safe()`, per-email error handling, UID EXPUNGE, file handle leaks, zip bomb guard, BOM fix (24 issues) |
 | v1.8.0 | 2026-03-19 | Code review v3 fixes: `disconnect()` crash, password retry, double I/O, `_safe()` tests, col_familia guards, cumulative zip limit + 37 new tests (15 issues) |
 | v1.8.3 | 2026-03-19 | Full project audit: security fixes, diagnostic.py overhaul, .gitignore cleanup, dead code removal |
+| v1.8.4 | 2026-03-19 | Bug fixes: shared dedup key, shared xlsx builder, env var warnings, healthcheck validation, dead code cleanup |
 
 ---
 
@@ -93,18 +94,18 @@ Root-cause analysis after reviews v1–v3 found ~70 issues:
 | 63 | `writer.py` | Backward scan for last row — O(n), only matters at 100k+ rows |
 | 64 | `writer.py` | Windows file locking is no-op (prod is Linux) |
 | 65 | 6 parsers | Inconsistent `dtype=str` usage |
-| 66 | `zetta_handler.py` | `passwords.index(pwd)` — use `enumerate()` instead |
+| 66 | `zetta_handler.py` | ~~`passwords.index(pwd)` — use `enumerate()` instead~~ **Fixed in v1.8.4** |
 | 68 | `main.py` + `writer.py` | `Дата обработки` stamped twice — diverges on midnight-crossing runs |
-| 69 | `main.py` x2 + `writer.py` | `_norm_date()` duplicated 3x — extract to `parsers/utils.py` |
+| 69 | `main.py` x2 + `writer.py` | ~~`_norm_date()` duplicated 3x~~ **Fixed in v1.8.4** — extracted to `parsers/utils.py` |
 | 74 | `diagnostic.py` | ~~Still reads `processed_ids.json` instead of SQLite `.db`~~ **Fixed in v1.8.3** |
-| 75 | `main.py` | `_expand_env()` silently passes through undefined env vars — should warn or error |
-| 76 | `main.py` | `_ping_healthcheck()` — no URL scheme validation, potential SSRF if config is tampered |
-| 77 | `writer.py` | `_append_to_existing()` never validates existing file column order matches `COLUMNS` |
-| 78 | `main.py` + `writer.py` | Dedup key constructed in 2 separate files — extract shared `dedup_key()` function |
-| 79 | `notifier.py` + `writer.py` | `_build_xlsx()` duplicates `_create_new()` styled xlsx logic — extract shared helper |
-| 80 | `clinic_matcher.py` | `_file_to_text()` reads entire xlsx into memory — add `nrows=50` limit |
+| 75 | `main.py` | ~~`_expand_env()` silently passes through undefined env vars~~ **Fixed in v1.8.4** |
+| 76 | `main.py` | ~~`_ping_healthcheck()` — no URL scheme validation~~ **Fixed in v1.8.4** — requires `https://` |
+| 77 | `writer.py` | ~~`_append_to_existing()` never validates column order~~ **Fixed in v1.8.4** — logs warning on mismatch |
+| 78 | `main.py` + `writer.py` | ~~Dedup key in 2 files~~ **Fixed in v1.8.4** — shared `record_key()` in `parsers/utils.py` |
+| 79 | `notifier.py` + `writer.py` | ~~`_build_xlsx()` duplicates styled xlsx logic~~ **Fixed in v1.8.4** — `build_styled_xlsx_bytes()` in writer |
+| 80 | `clinic_matcher.py` | ~~`_file_to_text()` reads entire xlsx~~ **Fixed in v1.8.4** — limited to 50 rows per sheet |
 | 81 | Multiple | `os.makedirs()` without `mode=` — dirs created with default permissions on Linux |
-| 82 | `main.py` | `import csv as csv_mod` alias in `_export_to_network()` — unnecessary, no name conflict |
+| 82 | `main.py` | ~~`import csv as csv_mod` alias~~ **Fixed in v1.8.4** — renamed to plain `csv` |
 
 ### Observations (no action needed)
 
