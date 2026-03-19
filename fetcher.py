@@ -163,14 +163,39 @@ class IMAPFetcher:
         except Exception:
             pass
 
+    @staticmethod
+    def _encode_imap_folder(name: str) -> str:
+        """Encode folder name as IMAP modified UTF-7 (RFC 3501 §5.1.3).
+        Required for non-ASCII folder names like 'Обработанные'."""
+        if name.isascii():
+            return name
+        # IMAP modified UTF-7: encode non-ASCII as UTF-16BE, then base64, replace / with ,
+        import codecs
+        result = []
+        buf = ''
+        for ch in name:
+            if 0x20 <= ord(ch) <= 0x7E:
+                if buf:
+                    encoded = codecs.encode(buf.encode('utf-16-be'), 'base64').decode('ascii').rstrip('\n=')
+                    result.append('&' + encoded.replace('/', ',') + '-')
+                    buf = ''
+                result.append(ch)
+            else:
+                buf += ch
+        if buf:
+            encoded = codecs.encode(buf.encode('utf-16-be'), 'base64').decode('ascii').rstrip('\n=')
+            result.append('&' + encoded.replace('/', ',') + '-')
+        return ''.join(result)
+
     def move_to_folder(self, imap_uids: list[str], dest_folder: str) -> None:
         """Move emails (by stable IMAP UID) to dest_folder. Uses UID COPY + UID STORE + EXPUNGE."""
         if not imap_uids or not dest_folder:
             return
         unique_uids = list(dict.fromkeys(imap_uids))  # deduplicate, preserve order
         uid_set = ','.join(unique_uids)
+        encoded_folder = self._encode_imap_folder(dest_folder)
         try:
-            status, _ = self.mail.uid('COPY', uid_set, dest_folder)
+            status, _ = self.mail.uid('COPY', uid_set, encoded_folder)
             if status == 'OK':
                 self.mail.uid('STORE', uid_set, '+FLAGS', '\\Deleted')
                 # Use UID EXPUNGE (RFC 4315) to only expunge our UIDs,

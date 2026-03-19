@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.9.1] - 2026-03-19
+### Fixed
+- **IMAP move to Cyrillic folder**: `move_to_folder()` now encodes folder names as IMAP modified UTF-7 (RFC 3501 §5.1.3) — fixes `'ascii' codec can't encode` crash when moving emails to `"Обработанные"`. Emails were processed correctly but never moved out of INBOX.
+
 ## [1.9.0] - 2026-03-19
 ### Added
 - **`ID Клиники` column in network CSVs**: new column for 1C integration, appears right after `Клиника` in both daily delta (`records_YYYY-MM-DD.csv`) and monthly master (`master_YYYY-MM.csv`) on the network share
