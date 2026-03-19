@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.8.3] - 2026-03-19
+### Security
+- **`diagnostic.py` env var expansion**: config now expands `${VAR}` placeholders — previously used literal strings, which could encourage putting plaintext passwords in config
+- **`diagnostic.py` SSL context**: IMAP connection now uses `ssl.create_default_context()` + 60s timeout (matching `fetcher.py`)
+- **`_safe()` DDE injection**: formula injection guard now also prefixes cells starting with `|` (pipe) to block DDE payloads
+- **Filename length truncation**: attachment filenames in `fetcher.py` now truncated to 200 chars to prevent OS path limit issues
+
+### Fixed
+- **`diagnostic.py` SQLite migration**: `load_processed_ids()` now reads from SQLite `processed_ids.db` (with JSON fallback) — was stuck on deprecated `processed_ids.json` since v1.6.0
+- **`diagnostic.py` UID SEARCH**: IMAP search now uses `uid('SEARCH')` / `uid('FETCH')` for stable UIDs (matching `fetcher.py`)
+- **Dead `company` variable**: removed always-None `company` variable and its dead fallback in `generic_parser.py`
+- **Redundant import**: removed duplicate `sys` import in `main.py:run_test_mode()` (already at module level)
+
+### Changed
+- **`.gitignore` cleanup**: added `processed_ids.db` (was missing since SQLite migration in v1.6.0)
+
 ## [1.8.2] - 2026-03-19
 ### Fixed
 - **Network share clutter**: documented that `master_file` must stay local — lock file, empty xlsx, and CSV backup were leaking to network share when `master_file` pointed there. Updated `config.example.yaml` with clear comments explaining the two-file contract (`records_*.csv` + `master_*.csv`)

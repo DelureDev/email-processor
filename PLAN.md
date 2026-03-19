@@ -1,6 +1,6 @@
 # Project Status
 
-Current version: **v1.8.2** | Tests: **103** (87 pass, 16 fixture-dependent skip)
+Current version: **v1.8.3** | Tests: **103** (87 pass, 16 fixture-dependent skip)
 
 ---
 
@@ -18,12 +18,13 @@ Current version: **v1.8.2** | Tests: **103** (87 pass, 16 fixture-dependent skip
 | v1.6.0–1.6.3 | 2026-03-19 | Code review v1 fixes: IMAP UIDs, `first_col()`, clinic sort, per-row try/except, formula injection, FIO casing, dead code cleanup (23 issues) |
 | v1.7.0–1.7.1 | 2026-03-19 | Code review v2 fixes: cross-run dedup, network CSV `_safe()`, per-email error handling, UID EXPUNGE, file handle leaks, zip bomb guard, BOM fix (24 issues) |
 | v1.8.0 | 2026-03-19 | Code review v3 fixes: `disconnect()` crash, password retry, double I/O, `_safe()` tests, col_familia guards, cumulative zip limit + 37 new tests (15 issues) |
+| v1.8.3 | 2026-03-19 | Full project audit: security fixes, diagnostic.py overhaul, .gitignore cleanup, dead code removal |
 
 ---
 
 ## Code review history
 
-Five review rounds, **74 issues found and fixed**, codebase now clean.
+Five review rounds + full audit, **74+ issues found and fixed**, codebase now clean.
 
 | Round | Date | Issues found | Fixed | Key themes |
 |-------|------|-------------|-------|------------|
@@ -32,6 +33,7 @@ Five review rounds, **74 issues found and fixed**, codebase now clean.
 | v3 | 2026-03-19 | 15 | 15 | `disconnect()` crash, password retry, `_safe()` tests, col_familia guards |
 | v4 | 2026-03-19 | 2 | 0 | Codebase clean — 1 cosmetic skip, 1 low-priority open |
 | v5 | 2026-03-19 | 6 | 0 | Codebase clean — docs-only fixes, observations for future |
+| Audit | 2026-03-19 | 14 | 8 | Full project audit — security, code quality, docs, .gitignore |
 
 ### Skipped / deferred (by design)
 
@@ -94,7 +96,7 @@ Root-cause analysis after reviews v1–v3 found ~70 issues:
 | 66 | `zetta_handler.py` | `passwords.index(pwd)` — use `enumerate()` instead |
 | 68 | `main.py` + `writer.py` | `Дата обработки` stamped twice — diverges on midnight-crossing runs |
 | 69 | `main.py` x2 + `writer.py` | `_norm_date()` duplicated 3x — extract to `parsers/utils.py` |
-| 74 | `diagnostic.py` | Still reads `processed_ids.json` instead of SQLite `.db` |
+| 74 | `diagnostic.py` | ~~Still reads `processed_ids.json` instead of SQLite `.db`~~ **Fixed in v1.8.3** |
 
 ### Observations (no action needed)
 

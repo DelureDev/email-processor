@@ -18,6 +18,8 @@ import imaplib
 import json
 import os
 import re
+import sqlite3
+import ssl
 import sys
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -28,9 +30,20 @@ import yaml
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
+def _expand_env(obj):
+    """Recursively expand ${VAR_NAME} placeholders in config values."""
+    if isinstance(obj, str):
+        return re.sub(r'\$\{(\w+)\}', lambda m: os.environ.get(m.group(1), m.group(0)), obj)
+    if isinstance(obj, dict):
+        return {k: _expand_env(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_expand_env(i) for i in obj]
+    return obj
+
+
 def load_config(path="config.yaml"):
     with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        return _expand_env(yaml.safe_load(f))
 
 
 def decode_header_value(raw):
@@ -91,14 +104,14 @@ def scan_inbox(config, days_back):
     folder = imap_cfg.get("folder", "INBOX")
 
     print(f"\n📡 Connecting to {host}:{port} as {user}...")
-    conn = imaplib.IMAP4_SSL(host, port)
+    conn = imaplib.IMAP4_SSL(host, port, ssl_context=ssl.create_default_context(), timeout=60)
     conn.login(user, password)
     conn.select(folder, readonly=True)
 
     since_date = (datetime.now() - timedelta(days=days_back)).strftime("%d-%b-%Y")
     print(f"🔍 Searching emails since {since_date} (days_back={days_back})...")
 
-    status, msg_ids = conn.search(None, f'(SINCE "{since_date}")')
+    status, msg_ids = conn.uid('SEARCH', None, f'(SINCE "{since_date}")')
     if status != "OK" or not msg_ids[0]:
         print("   No emails found.")
         conn.logout()
@@ -109,7 +122,7 @@ def scan_inbox(config, days_back):
 
     emails = []
     for i, mid in enumerate(id_list, 1):
-        status, data = conn.fetch(mid, "(RFC822)")
+        status, data = conn.uid('FETCH', mid, "(RFC822)")
         if status != "OK":
             continue
         raw = data[0][1]
@@ -203,21 +216,39 @@ def scan_master(config):
 
 # ─── Processed IDs Scanner ───────────────────────────────────────────────────
 
-def load_processed_ids(path="processed_ids.json"):
-    if not os.path.exists(path):
-        print(f"⚠️  {path} not found — assuming no messages processed.\n")
-        return set()
-    with open(path, "r") as f:
-        data = json.load(f)
-    # Could be a list or dict
-    if isinstance(data, list):
-        ids = set(str(x) for x in data)
-    elif isinstance(data, dict):
-        ids = set(str(x) for x in data.keys())
-    else:
-        ids = set()
-    print(f"📋 Loaded {len(ids)} processed message IDs from {path}.\n")
-    return ids
+def load_processed_ids(config=None):
+    """Load processed IDs from SQLite (preferred) or legacy JSON fallback."""
+    # Try SQLite first (current format since v1.6.0)
+    db_path = "processed_ids.db"
+    if config:
+        db_path = config.get('processing', {}).get('processed_ids_file', db_path)
+    if os.path.exists(db_path):
+        try:
+            conn = sqlite3.connect(db_path, timeout=5)
+            rows = conn.execute("SELECT message_id FROM processed_ids").fetchall()
+            conn.close()
+            ids = set(r[0] for r in rows)
+            print(f"📋 Loaded {len(ids)} processed message IDs from {db_path}.\n")
+            return ids
+        except Exception as e:
+            print(f"⚠️  Error reading {db_path}: {e}")
+
+    # Fallback to legacy JSON
+    json_path = "processed_ids.json"
+    if os.path.exists(json_path):
+        with open(json_path, "r") as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            ids = set(str(x) for x in data)
+        elif isinstance(data, dict):
+            ids = set(str(x) for x in data.keys())
+        else:
+            ids = set()
+        print(f"📋 Loaded {len(ids)} processed message IDs from {json_path} (legacy).\n")
+        return ids
+
+    print("⚠️  No processed IDs file found — assuming no messages processed.\n")
+    return set()
 
 
 # ─── Cross-Reference & Report ────────────────────────────────────────────────
@@ -440,7 +471,7 @@ def main():
     master_df, by_source = scan_master(config)
 
     # Phase 3: Load processed IDs
-    processed_ids = load_processed_ids()
+    processed_ids = load_processed_ids(config)
 
     # Phase 4: Cross-reference
     report = build_report(emails, master_df, by_source, processed_ids)

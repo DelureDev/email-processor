@@ -182,7 +182,7 @@ def _safe(value) -> object:
     if not s:
         return value
     c = s[0]
-    if c in ('=', '+', '@', '\t', '\r'):
+    if c in ('=', '+', '@', '\t', '\r', '|'):
         return "'" + s
     if c == '-' and (len(s) < 2 or not s[1].isdigit()):
         return "'" + s

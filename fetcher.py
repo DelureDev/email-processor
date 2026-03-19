@@ -340,7 +340,12 @@ class IMAPFetcher:
                     continue
 
                 filename = decode_mime_header(filename)
-                safe_name = f"{msg_id_str}_{re.sub(r'[\x00-\x1f\\/:*?\"<>|]', '_', os.path.basename(filename))}"
+                base = re.sub(r'[\x00-\x1f\\/:*?\"<>|]', '_', os.path.basename(filename))
+                # Truncate to prevent exceeding OS path limits (keep extension)
+                if len(base) > 200:
+                    name_part, ext = os.path.splitext(base)
+                    base = name_part[:200 - len(ext)] + ext
+                safe_name = f"{msg_id_str}_{base}"
                 filepath = os.path.join(self.temp_folder, safe_name)
 
                 try:

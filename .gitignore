@@ -9,6 +9,7 @@ venv/
 temp/
 logs/*.log
 output/
+processed_ids.db
 processed_ids.json
 processed_ids.json.bak
 diagnostic_report.json

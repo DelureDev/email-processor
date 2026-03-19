@@ -22,7 +22,6 @@ def parse(filepath: str) -> list[dict]:
     results = []
 
     # Try to extract company name and dates from upper rows
-    company = None
     strahovatel = None
     start_date = None
     end_date = None
@@ -114,7 +113,7 @@ def parse(filepath: str) -> list[dict]:
 
             row_start = format_date(df.iloc[i, col_start]) if col_start is not None else start_date
             row_end = format_date(df.iloc[i, col_end]) if col_end is not None else end_date
-            row_company = get_cell_str(df, i, col_company) or company
+            row_company = get_cell_str(df, i, col_company)
             row_work = get_cell_str(df, i, col_work) or strahovatel
 
             record = {

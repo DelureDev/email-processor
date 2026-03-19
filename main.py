@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.8.2"
+__version__ = "1.8.3"
 
 import os
 import re
@@ -528,7 +528,7 @@ def run_local_mode(folder: str, config: dict, dry_run: bool = False):
 
 def run_test_mode(folder: str, config: dict):
     """Test mode: parse files and show results, don't write anything."""
-    import sys, io
+    import io
     if sys.stdout.encoding and sys.stdout.encoding.lower().replace('-', '') != 'utf8':
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     logger = logging.getLogger(__name__)
