@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.8.4"
+__version__ = "1.9.0"
 
 import os
 import re
@@ -222,11 +222,11 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
 
     # Detect clinic (once per file) and inject into all records BEFORE dedup,
     # because Клиника is part of the dedup key.
-    clinic, need_comment = detect_clinic(filepath)
+    clinic, need_comment, clinic_id = detect_clinic(filepath)
     comment = ''
     if need_comment:
         comment = extract_policy_comment(filepath)
-    records = [{**r, 'Клиника': clinic, 'Комментарий в полис': comment} for r in records]
+    records = [{**r, 'Клиника': clinic, 'ID Клиники': clinic_id, 'Комментарий в полис': comment} for r in records]
 
     if clinic == '⚠️ Не определено':
         stats['unmatched_clinics'].append(filename)
@@ -329,6 +329,13 @@ def _export_to_network(config: dict, stats: dict) -> None:
     import csv
     from writer import COLUMNS, _safe
 
+    # Network CSV includes ID Клиники for 1C integration (right after Клиника)
+    csv_columns = []
+    for c in COLUMNS:
+        csv_columns.append(c)
+        if c == 'Клиника':
+            csv_columns.append('ID Клиники')
+
     now = datetime.now()
     records = stats['new_records']
 
@@ -339,7 +346,7 @@ def _export_to_network(config: dict, stats: dict) -> None:
         write_header = not os.path.exists(daily_dest)
         encoding = 'utf-8-sig' if write_header else 'utf-8'
         with open(daily_dest, 'a', newline='', encoding=encoding) as f:
-            w = csv.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
+            w = csv.DictWriter(f, fieldnames=csv_columns, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
             if write_header:
                 w.writeheader()
             for record in records:
@@ -355,7 +362,7 @@ def _export_to_network(config: dict, stats: dict) -> None:
         write_header = not os.path.exists(monthly_dest)
         encoding = 'utf-8-sig' if write_header else 'utf-8'
         with open(monthly_dest, 'a', newline='', encoding=encoding) as f:
-            w = csv.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
+            w = csv.DictWriter(f, fieldnames=csv_columns, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
             if write_header:
                 w.writeheader()
             for record in records:

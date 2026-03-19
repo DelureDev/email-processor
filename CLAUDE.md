@@ -132,7 +132,7 @@ git pull
 
 ## Fix history
 
-See `PLAN.md` for full version history and `CHANGELOG.md` for per-version details. Current version: **v1.8.4**.
+See `PLAN.md` for full version history and `CHANGELOG.md` for per-version details. Current version: **v1.9.0**.
 
 ## Security hardening
 
@@ -150,7 +150,7 @@ See `PLAN.md` for full version history and `CHANGELOG.md` for per-version detail
 - **Skipped-file breakdown** — email report shows why files were skipped (by rule / unknown format / empty) and lists any xlsx files that hit a skip rule.
 - **Daily delta email** — attaches `records_YYYY-MM-DD.xlsx` (styled) with only this run's new records. No CSV in email — available on network share instead.
 - **Monthly master email** — on last day of month, email also attaches `master_YYYY-MM.xlsx` with all records for the current month.
-- **Network share export** — writes daily delta CSV and monthly `master_YYYY-MM.csv` to configured folder. Set `output.csv_export_folder` in `config.yaml`.
+- **Network share export** — writes daily delta CSV and monthly `master_YYYY-MM.csv` to configured folder. Set `output.csv_export_folder` in `config.yaml`. Network CSVs include an extra `ID Клиники` column (after `Клиника`) for 1C integration — configured via `id` field in `clinics.yaml`.
 - **`ё` → `е` normalization** — applied in both dedup key (`main.py`) and `load_existing_keys()` (`writer.py`) to prevent false duplicates.
 - **Clinic column** — `Клиника` populated for every record; `"⚠️ Не определено"` if no keyword match. Part of dedup key.
 - **Policy comment** — `Комментарий в полис` extracted only when clinic has `extract_comment: true` in `clinics.yaml`.

@@ -1,6 +1,6 @@
 # Project Status
 
-Current version: **v1.8.4** | Tests: **103** (87 pass, 16 fixture-dependent skip) | Production-ready
+Current version: **v1.9.0** | Tests: **104** (88 pass, 16 fixture-dependent skip) | Production-ready
 
 ---
 
@@ -20,6 +20,7 @@ Current version: **v1.8.4** | Tests: **103** (87 pass, 16 fixture-dependent skip
 | v1.8.0 | 2026-03-19 | Code review v3: `disconnect()` crash, password retry, col_familia guards + 37 new tests (15 issues) |
 | v1.8.3 | 2026-03-19 | Full audit: diagnostic.py overhaul, security fixes, .gitignore cleanup (8 fixes) |
 | v1.8.4 | 2026-03-19 | Shared dedup key, shared xlsx builder, env var warnings, healthcheck validation (10 fixes) |
+| v1.9.0 | 2026-03-19 | New feature: `ID Клиники` column in network share CSVs for 1C integration |
 
 **Total: 6 review rounds, 90+ issues found and fixed.**
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.9.0] - 2026-03-19
+### Added
+- **`ID Клиники` column in network CSVs**: new column for 1C integration, appears right after `Клиника` in both daily delta (`records_YYYY-MM-DD.csv`) and monthly master (`master_YYYY-MM.csv`) on the network share
+- **`id` field in `clinics.yaml`**: each clinic can now have an `id` (e.g. `"000000001"`) that maps to the `ID Клиники` CSV column; empty string if no match or no id configured
+- **`detect_clinic()` returns 3-tuple**: `(clinic_name, extract_comment, clinic_id)` — backward-compatible via unpacking
+- **Test**: `test_clinic_id_returned` verifies clinic ID flows from yaml through detection (88 pass, 16 skip)
+
+### Notes
+- `master.xlsx`, `master.csv` backup, and email report xlsx are **unchanged** — `ID Клиники` is CSV-only for 1C
+- No impact on dedup key
+
 ## [1.8.4] - 2026-03-19
 ### Fixed (Refactoring — audit follow-up)
 - **Shared dedup key (#69/#78)**: extracted `record_key()`, `clean_dedup_val()`, `norm_date_pad()` to `parsers/utils.py` — eliminates 3x duplication across `main.py` and `writer.py`; single source of truth for dedup logic

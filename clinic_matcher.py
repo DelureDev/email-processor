@@ -38,9 +38,10 @@ def _load_clinics(config_path: str = 'clinics.yaml') -> list[dict]:
     for entry in data.get('clinics', []):
         name = entry.get('name', '').strip()
         extract_comment = entry.get('extract_comment', False)
+        clinic_id = entry.get('id', '')
         for kw in entry.get('keywords', []):
             if name and kw:
-                entries.append({'name': name, 'keyword': kw.lower(), 'extract_comment': extract_comment})
+                entries.append({'name': name, 'keyword': kw.lower(), 'extract_comment': extract_comment, 'id': clinic_id})
     entries.sort(key=lambda e: len(e['keyword']), reverse=True)
     _clinics = entries
     logger.debug(f"Loaded {len(_clinics)} clinic keyword entries from {config_path}")
@@ -75,28 +76,29 @@ _COMMENT_COLUMNS = [
 _COMMENT_ROW_KEYWORDS = ['поликлиническое', 'амбулаторно', 'стоматологическое', 'программа']
 
 
-def detect_clinic(filepath: str, config_path: str = 'clinics.yaml') -> tuple[str, bool]:
+def detect_clinic(filepath: str, config_path: str = 'clinics.yaml') -> tuple[str, bool, str]:
     """
     Scan file for clinic keywords.
-    Returns (clinic_name, extract_comment) tuple.
+    Returns (clinic_name, extract_comment, clinic_id) tuple.
     clinic_name is '⚠️ Не определено' if no match found.
     extract_comment is True if this clinic has extract_comment: true in clinics.yaml.
+    clinic_id is the 'id' field from clinics.yaml (empty string if no match or no id).
     """
     clinics = _load_clinics(config_path)
     if not clinics:
-        return '⚠️ Не определено', False
+        return '⚠️ Не определено', False, ''
 
     text = _file_to_text(filepath)
     if not text:
-        return '⚠️ Не определено', False
+        return '⚠️ Не определено', False, ''
 
     for entry in clinics:
         if entry['keyword'] in text:
             logger.debug(f"Clinic matched: '{entry['name']}' via keyword '{entry['keyword']}' in {os.path.basename(filepath)}")
-            return entry['name'], entry['extract_comment']
+            return entry['name'], entry['extract_comment'], entry.get('id', '')
 
     logger.warning(f"No clinic matched for {os.path.basename(filepath)} — setting '⚠️ Не определено'")
-    return '⚠️ Не определено', False
+    return '⚠️ Не определено', False, ''
 
 
 def extract_policy_comment(filepath: str) -> str:

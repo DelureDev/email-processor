@@ -44,9 +44,10 @@ class TestDetectClinic:
             ['ФИО', 'Полис'],
             ['Иванов', '001'],
         ])
-        clinic, extract_comment = detect_clinic(xlsx_path, config_path=clinics_path)
+        clinic, extract_comment, clinic_id = detect_clinic(xlsx_path, config_path=clinics_path)
         assert clinic == 'Тест Клиника'
         assert extract_comment is False
+        assert clinic_id == ''
 
     def test_no_match(self, tmp_path):
         clinics_path = str(tmp_path / 'clinics.yaml')
@@ -55,8 +56,9 @@ class TestDetectClinic:
         ])
         xlsx_path = str(tmp_path / 'test.xlsx')
         _make_xlsx(xlsx_path, [['ФИО', 'Полис'], ['Иванов', '001']])
-        clinic, _ = detect_clinic(xlsx_path, config_path=clinics_path)
+        clinic, _, clinic_id = detect_clinic(xlsx_path, config_path=clinics_path)
         assert clinic == '⚠️ Не определено'
+        assert clinic_id == ''
 
     def test_longest_keyword_wins(self, tmp_path):
         clinics_path = str(tmp_path / 'clinics.yaml')
@@ -66,7 +68,7 @@ class TestDetectClinic:
         ])
         xlsx_path = str(tmp_path / 'test.xlsx')
         _make_xlsx(xlsx_path, [['Прикрепление к Клиника АБВГД']])
-        clinic, _ = detect_clinic(xlsx_path, config_path=clinics_path)
+        clinic, _, _ = detect_clinic(xlsx_path, config_path=clinics_path)
         assert clinic == 'Клиника АБ'
 
     def test_extract_comment_flag(self, tmp_path):
@@ -76,16 +78,28 @@ class TestDetectClinic:
         ])
         xlsx_path = str(tmp_path / 'test.xlsx')
         _make_xlsx(xlsx_path, [['Направление в Спец Клиника']])
-        clinic, extract_comment = detect_clinic(xlsx_path, config_path=clinics_path)
+        clinic, extract_comment, _ = detect_clinic(xlsx_path, config_path=clinics_path)
         assert clinic == 'Спец'
         assert extract_comment is True
 
     def test_missing_clinics_yaml(self, tmp_path):
-        clinic, _ = detect_clinic(
+        clinic, _, clinic_id = detect_clinic(
             str(tmp_path / 'test.xlsx'),
             config_path=str(tmp_path / 'nonexistent.yaml'),
         )
         assert clinic == '⚠️ Не определено'
+        assert clinic_id == ''
+
+    def test_clinic_id_returned(self, tmp_path):
+        clinics_path = str(tmp_path / 'clinics.yaml')
+        _make_clinics_yaml(clinics_path, [
+            {'name': 'Тест', 'id': '000000042', 'keywords': ['тест']},
+        ])
+        xlsx_path = str(tmp_path / 'test.xlsx')
+        _make_xlsx(xlsx_path, [['Данные для Тест']])
+        clinic, _, clinic_id = detect_clinic(xlsx_path, config_path=clinics_path)
+        assert clinic == 'Тест'
+        assert clinic_id == '000000042'
 
 
 class TestExtractPolicyComment:
