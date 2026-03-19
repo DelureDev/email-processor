@@ -97,6 +97,14 @@ Root-cause analysis after reviews v1–v3 found ~70 issues:
 | 68 | `main.py` + `writer.py` | `Дата обработки` stamped twice — diverges on midnight-crossing runs |
 | 69 | `main.py` x2 + `writer.py` | `_norm_date()` duplicated 3x — extract to `parsers/utils.py` |
 | 74 | `diagnostic.py` | ~~Still reads `processed_ids.json` instead of SQLite `.db`~~ **Fixed in v1.8.3** |
+| 75 | `main.py` | `_expand_env()` silently passes through undefined env vars — should warn or error |
+| 76 | `main.py` | `_ping_healthcheck()` — no URL scheme validation, potential SSRF if config is tampered |
+| 77 | `writer.py` | `_append_to_existing()` never validates existing file column order matches `COLUMNS` |
+| 78 | `main.py` + `writer.py` | Dedup key constructed in 2 separate files — extract shared `dedup_key()` function |
+| 79 | `notifier.py` + `writer.py` | `_build_xlsx()` duplicates `_create_new()` styled xlsx logic — extract shared helper |
+| 80 | `clinic_matcher.py` | `_file_to_text()` reads entire xlsx into memory — add `nrows=50` limit |
+| 81 | Multiple | `os.makedirs()` without `mode=` — dirs created with default permissions on Linux |
+| 82 | `main.py` | `import csv as csv_mod` alias in `_export_to_network()` — unnecessary, no name conflict |
 
 ### Observations (no action needed)
 
@@ -104,9 +112,14 @@ Root-cause analysis after reviews v1–v3 found ~70 issues:
 |---|------|
 | 71 | `clinics.yaml` "Детская стоматология" is substring of "Детская стоматология №2" — handled by longest-first sort |
 | 72 | `notifier.py` `_is_zetta_notification()` uses brittle `^11140` prefix — cosmetic only |
+| 83 | `clinic_matcher.py` global `_clinics` singleton not thread-safe — OK, app is single-threaded |
+| 84 | `fetcher.py` zip passwords held in plaintext memory — acceptable for server-side processing |
+| 85 | `writer.py` `_safe()` does not cover `\n=` embedded newline injection — low risk, data is from insurance xlsx |
+| 86 | `fetcher.py` fetch loop uses 2-space indent (issue #67) — internally consistent, deferred |
 
 ### Future features
 
 - [ ] Multi-clinic files (one file = two clinics) — decide when needed
 - [ ] Per-clinic comment column headers for different insurer formats
 - [ ] **Test coverage push** — highest-ROI action: `process_file()`, `should_skip_file()`, `_build_message()`, `first_col()`, fetcher pure functions
+- [ ] Windows file locking (`msvcrt.locking()` or `portalocker`) for dev/testing parity with prod
