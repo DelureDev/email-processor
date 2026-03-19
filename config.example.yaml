@@ -51,7 +51,15 @@ healthcheck_url: ""   # e.g. https://hc-ping.com/your-uuid-here
 
 # --- Output ---
 output:
+  # Master file — keep LOCAL (./output/). Lock files and CSV backup are created
+  # next to it. Do NOT point this at the network share.
   master_file: "./output/master.xlsx"
+
+  # Network share for 1C integration (optional, leave empty to disable).
+  # Only two file types are written here:
+  #   records_YYYY-MM-DD.csv  — daily delta (appended across runs within the day)
+  #   master_YYYY-MM.csv      — monthly cumulative (new file each month)
+  # csv_export_folder: "/mnt/storage"
 
 # --- Logging ---
 logging:

@@ -1,6 +1,6 @@
 # Project Status
 
-Current version: **v1.8.0** | Tests: **103** (87 pass, 16 fixture-dependent skip)
+Current version: **v1.8.2** | Tests: **103** (87 pass, 16 fixture-dependent skip)
 
 ---
 

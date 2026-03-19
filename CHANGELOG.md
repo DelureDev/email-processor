@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.8.2] - 2026-03-19
+### Fixed
+- **Network share clutter**: documented that `master_file` must stay local — lock file, empty xlsx, and CSV backup were leaking to network share when `master_file` pointed there. Updated `config.example.yaml` with clear comments explaining the two-file contract (`records_*.csv` + `master_*.csv`)
+
 ## [1.8.0] - 2026-03-19
 ### Fixed (Critical — code review v3)
 - **`disconnect()` crash (#48)**: `fetcher.disconnect()` no longer crashes with `AttributeError` when `connect()` never succeeded — added `hasattr(self, 'mail')` guard
