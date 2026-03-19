@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.9.2] - 2026-03-19
+### Fixed
+- **Network CSV backward compatibility**: existing CSV files on network share (daily + monthly) are automatically migrated when `ID Клиники` column is missing — inserts new column after `Клиника` with empty values for old rows, then appends new data normally. No manual deletion needed.
+
 ## [1.9.1] - 2026-03-19
 ### Fixed
 - **IMAP move to Cyrillic folder**: `move_to_folder()` now encodes folder names as IMAP modified UTF-7 (RFC 3501 §5.1.3) — fixes `'ascii' codec can't encode` crash when moving emails to `"Обработанные"`. Emails were processed correctly but never moved out of INBOX.

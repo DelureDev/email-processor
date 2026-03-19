@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.9.1"
+__version__ = "1.9.2"
 
 import os
 import re
@@ -336,12 +336,42 @@ def _export_to_network(config: dict, stats: dict) -> None:
         if c == 'Клиника':
             csv_columns.append('ID Клиники')
 
+    def _migrate_csv_header(filepath: str) -> None:
+        """If existing CSV has old header (without ID Клиники), rewrite with new column.
+        Old data rows get empty ID Клиники; new rows will have the value."""
+        if not os.path.exists(filepath):
+            return
+        try:
+            with open(filepath, 'r', encoding='utf-8-sig', newline='') as f:
+                reader = csv.reader(f, delimiter=';')
+                rows = list(reader)
+            if not rows:
+                return
+            header = rows[0]
+            if 'ID Клиники' in header:
+                return  # already migrated
+            if 'Клиника' not in header:
+                return  # unrecognized format, don't touch
+            # Insert ID Клиники after Клиника
+            idx = header.index('Клиника') + 1
+            new_header = header[:idx] + ['ID Клиники'] + header[idx:]
+            new_rows = [new_header]
+            for row in rows[1:]:
+                new_rows.append(row[:idx] + [''] + row[idx:])
+            with open(filepath, 'w', encoding='utf-8-sig', newline='') as f:
+                writer = csv.writer(f, delimiter=';', lineterminator='\r\n')
+                writer.writerows(new_rows)
+            logger.info(f"Migrated CSV header: added ID Клиники column to {filepath}")
+        except Exception as e:
+            logger.warning(f"Failed to migrate CSV header in {filepath}: {e}")
+
     now = datetime.now()
     records = stats['new_records']
 
     # 1. Daily delta — append across runs within the same day
     date_str = now.strftime('%Y-%m-%d')
     daily_dest = os.path.join(folder, f'records_{date_str}.csv')
+    _migrate_csv_header(daily_dest)
     try:
         write_header = not os.path.exists(daily_dest)
         encoding = 'utf-8-sig' if write_header else 'utf-8'
@@ -358,6 +388,7 @@ def _export_to_network(config: dict, stats: dict) -> None:
     # 2. Monthly master — append to current month file, new file each month
     month_str = now.strftime('%Y-%m')
     monthly_dest = os.path.join(folder, f'master_{month_str}.csv')
+    _migrate_csv_header(monthly_dest)
     try:
         write_header = not os.path.exists(monthly_dest)
         encoding = 'utf-8-sig' if write_header else 'utf-8'
