@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.8.0] - 2026-03-19
+### Fixed (Critical — code review v3)
+- **`disconnect()` crash (#48)**: `fetcher.disconnect()` no longer crashes with `AttributeError` when `connect()` never succeeded — added `hasattr(self, 'mail')` guard
+- **Password email processed too early (#49)**: password emails only marked as processed when extraction actually succeeds — failed extractions will be retried next run (both pre-scan and main loop)
+
+### Fixed (High — code review v3)
+- **IMAP re-download loop (#50)**: emails producing only duplicate records are now moved to processed folder — previously re-downloaded and re-parsed every run
+- **Double master.xlsx read (#51)**: `load_existing_keys()` reads column headers once and reuses, instead of opening the file twice
+- **col_familia guard (#53/#54)**: 5 parsers (psb, sber, soglasie, kaplife, yugoriya) now return `[]` with error log when 'Фамилия' column not found — prevents silent 0-record output
+- **Cumulative zip size limit (#55)**: zip extraction now tracks cumulative extracted size and stops at 500MB total (in addition to existing 100MB per-entry limit)
+
+### Fixed (Medium — code review v3)
+- **Monthly report date filter (#56)**: dates now zero-padded before month matching — `1.3.2026` correctly matches `03.2026` suffix
+- **Sender detection hardened (#57)**: `detect_by_sender()` now uses exact email match or `@domain` suffix check for full-email sender keys — substring-only matching limited to partial keys like `spiskirobot`
+- **Config validation (#58)**: `load_config()` now validates required keys (`imap.server`, `imap.username`, `imap.password`, `processing.temp_folder`, `processing.processed_ids_file`) on startup with clear error messages
+
+### Added (Tests — code review v3)
+- **`_safe()` tests (#52)**: 13 tests for formula injection prevention — covers `=`, `+`, `@`, `\t`, `\r`, `-` prefixes, negative numbers, None, empty string
+- **`zetta_handler` tests (#59)**: 17 tests for sender detection, monthly/per-email password extraction, zip extraction, zip slip blocking, invalid zip handling
+- **`clinic_matcher` tests (#59)**: 9 tests for clinic keyword matching, longest-keyword-wins, extract_comment flag, missing clinics.yaml, policy comment extraction
+- **Dedup edge case tests (#59)**: `ё`→`е` normalization, date zero-padding, clinic-in-key differentiation
+- **Sender detection tests (#59)**: 8 tests for exact match, domain match, partial key, case insensitivity, all known senders
+- Test count: 50 → 87 (+37 new tests)
+
 ## [1.7.1] - 2026-03-19
 ### Fixed (Low — code review v2)
 - **`_safe()` negative numbers (#34)**: `-500` no longer gets formula-injection prefix — only prefixes `-` when not followed by a digit

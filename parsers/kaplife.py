@@ -66,6 +66,9 @@ def parse(filepath: str) -> list[dict]:
     else:
         # Standard Прикрепление format: split ФИО
         col_familia = find_col(headers, 'фамилия')
+        if col_familia is None:
+            logger.error(f"KAPLIFE: Could not find 'Фамилия' column in {filepath}")
+            return []
         col_imya = find_col(headers, 'имя')
         col_otchestvo = find_col(headers, 'отчество')
         col_birth = find_col(headers, 'дата', 'рожд')

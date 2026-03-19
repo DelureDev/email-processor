@@ -1,6 +1,6 @@
 # Project Status
 
-Current version: **v1.7.1**
+Current version: **v1.8.0**
 
 ---
 
@@ -106,8 +106,92 @@ Current version: **v1.7.1**
 
 ---
 
+## Why do bugs keep appearing after every code review?
+
+Honest root-cause analysis — three reviews, ~70 issues found across them:
+
+1. **The project was built feature-first, not test-first.** v1.0.0 shipped 15 parsers, IMAP, SMTP, ZIP handling, dedup, CSV export — a huge surface area — with tests only covering utilities and a handful of parsers. Every review catches bugs that tests would have caught at write-time. ~70% of the codebase has zero test coverage. That's the #1 reason.
+
+2. **Each fix wave introduces new code paths that aren't tested either.** v1.6.0–v1.7.1 fixed 47 issues but added zero tests for fetcher, notifier, clinic_matcher, or zetta_handler. The fixes are correct, but the *surrounding* code is still unverified, so the next review finds more.
+
+3. **`main.py` is a god module.** 622 lines orchestrating config, CLI, stats, 3 execution modes, CSV export, healthcheck, and monthly reports. Hard to review, hard to test, easy to miss interactions.
+
+4. **No integration tests.** Unit tests exist for record keys and writer, but nobody tests the full `process_file()` pipeline with mocked IMAP/SMTP. Edge cases in the pipeline seams (dedup timing, clinic injection order, IMAP ID tracking) only surface under review.
+
+**The fix isn't "review harder" — it's: write tests for the untested 70%, then bugs stop appearing because they get caught at commit time, not review time.**
+
+---
+
+## Code review findings v3 (2026-03-19)
+
+### Critical — fix now
+
+| # | File | Issue | How to fix | Status |
+|---|------|-------|------------|--------|
+| 48 | `fetcher.py:159` | `disconnect()` crashes with `AttributeError` if `connect()` never succeeded — `self.mail` doesn't exist | Add `if not hasattr(self, 'mail'): return` at top of `disconnect()` | ✅ v1.8.0 |
+| 49 | `fetcher.py:238` | Password email marked processed even when extraction returns None — password lost forever, never retried | Move `self.processed_ids.add(message_id)` inside the `if monthly:` block | ✅ v1.8.0 |
+
+### High — fix soon
+
+| # | File | Issue | How to fix | Status |
+|---|------|-------|------------|--------|
+| 50 | `main.py:410` | Emails producing only duplicate records never moved to processed folder — re-downloaded every run, wasted bandwidth | Change condition: track `imap_id` whenever `process_file()` was called (not just when new records produced). Dedup already handles duplicates. | ✅ v1.8.0 |
+| 51 | `writer.py:44` | `load_existing_keys()` reads master.xlsx twice (once for column check, once for data) — doubles I/O, TOCTOU race | Single `pd.read_excel(nrows=0)`, save columns, then `pd.read_excel(usecols=...)`. Wrap in try/except for corrupted files. | ✅ v1.8.0 |
+| 52 | `writer.py:174` | `_safe()` formula injection — zero tests. Security-critical function never verified. | Add test cases: `=CMD()`, `+IMPORT()`, `@SUM()` blocked; `-500` preserved; `None`→`''`; `\t` blocked. | ✅ v1.8.0 |
+| 53 | 5 parsers | `psb.py`, `sber.py`, `soglasie.py`, `kaplife.py`, `yugoriya.py` — no `if col_familia is None: return []` guard before data loop. If column not found, entire file silently produces 0 records. | Add explicit check after `find_col()`: `if col_familia is None: logger.error(...); return []` — same pattern as ingos.py and luchi.py already use. | ✅ v1.8.0 |
+| 54 | `parsers/utils.py:76` | `assemble_fio(col_familia=None)` crashes with TypeError — caught by per-row except, but entire file silently returns 0 records | Either add None guard in `assemble_fio()`, or rely on #53 fix (preferred — fail early, not per-row). | ✅ v1.8.0 (via #53) |
+| 55 | `zetta_handler.py:148-160` | No cumulative zip extraction size limit — individual entries capped at 100MB but a zip with 10x100MB entries consumes 1GB disk | Add `total_extracted` counter, abort if cumulative exceeds 500MB configurable limit. | ✅ v1.8.0 |
+
+### Medium — improve
+
+| # | File | Issue | How to fix | Status |
+|---|------|-------|------------|--------|
+| 56 | `main.py:300` | Monthly report date filter uses `str.endswith(month_suffix)` but dates may not be zero-padded consistently | Use same `norm_date()` logic as `_record_key()` before filtering, or parse dates properly with `pd.to_datetime()`. | ✅ v1.8.0 |
+| 57 | `detector.py:41` | Sender detection uses substring `in` — `fake@notpsbins.ru` matches `psbins.ru` | Change to exact email match or `sender_lower.endswith('@' + domain)` check. | ✅ v1.8.0 |
+| 58 | `main.py:71` | Config has no schema validation — missing keys crash with unhelpful `KeyError` deep in pipeline | Add `_validate_config(config)` after load: check required keys exist (`imap.server`, `imap.username`, `output.master_file`, etc.). Return clear error. | ✅ v1.8.0 |
+| 59 | Tests | 0% coverage for fetcher, notifier, clinic_matcher, zetta_handler. No mocking. CI silently skips fixture-dependent tests. | Priority: (1) `_safe()` tests, (2) `zetta_handler` password extraction tests (pure functions, easy), (3) `clinic_matcher` tests with temp clinics.yaml, (4) `fetcher` + `notifier` with mocked IMAP/SMTP. | ✅ v1.8.0 (partial: _safe, zetta, clinic_matcher, detector sender) |
+| 60 | `main.py` | 622-line god module — config, CLI, stats, 3 modes, CSV export, healthcheck, monthly reports all in one file | Extract `_export_to_network()` and `_attach_monthly_if_last_day()` to separate module. Consider `PipelineOrchestrator` class for `process_file()`. Not urgent but prevents future bug density. | |
+| 61 | 8 parsers | Metadata extraction from upper rows (dates, company name) duplicated with identical nested loops | Extract to `extract_file_metadata(df, max_rows=20) -> dict` in `parsers/utils.py`. Return `{strahovatel, start_date, end_date}`. | |
+
+### Low — nice to have
+
+| # | File | Issue | How to fix | Status |
+|---|------|-------|------------|--------|
+| 62 | `requirements.txt` | No lockfile — `pip install` may pull different versions on different machines | Add `requirements.lock` via `pip freeze`. Add `requirements-dev.txt` for pytest. | |
+| 63 | `writer.py:232-237` | `_append_to_existing()` scans backwards from `max_row` to find last data row — O(n) on large files | Accept openpyxl's `max_row` as-is (it's reliable for non-styled rows). Only matters at 100k+ rows. | |
+| 64 | `writer.py:20-22` | Windows file locking is no-op — concurrent writes on Windows corrupt master.xlsx | Implement via `msvcrt.locking()` or document single-instance requirement. Low priority since prod is Linux. | |
+| 65 | 6 parsers | Inconsistent `dtype=str` — ingos, luchi, energogarant, generic use it, others don't | Standardize to `dtype=str` in all parsers. Prevents pandas date auto-parsing surprises. | |
+| 66 | `zetta_handler.py:207` | `passwords.index(pwd)` logs wrong index if password appears multiple times in list | Use `enumerate()` in `try_passwords()` loop and log iteration count. | |
+
+---
+
+## Code review findings v4 (2026-03-19)
+
+**Result: codebase is clean.** Only 1 real (minor) issue found after 3 prior rounds that fixed ~70 bugs total.
+
+### Medium
+
+| # | File | Issue | How to fix | Status |
+|---|------|-------|------------|--------|
+| 67 | `fetcher.py:259` | Indentation inconsistency — `try/except` block uses 2-space indent inside 4-space code | Internally consistent (try/body/except all use 2-space). Reindenting 130 lines is risky for a cosmetic fix. | ⏭️ SKIP |
+
+### Low
+
+| # | File | Issue | How to fix | Status |
+|---|------|-------|------------|--------|
+| 68 | `main.py:246` + `writer.py:116` | `Дата обработки` stamped twice — once in `process_file()` for stats, again in `write_batch_to_master()`. Only diverges on midnight-crossing runs | Pass timestamp as parameter instead of calling `datetime.now()` twice. Low priority — date-only format means this only matters at exactly midnight | |
+
+### False positives rejected
+
+- "Zip Slip guard broken" — `os.path.realpath() + os.sep` is correct
+- "Float-to-int >2^53" — insurance policy numbers are not 16-digit floats
+- "Dedup key includes clinic = allows duplicates" — by design since v1.4.1
+- "Generic parser 'фио' matches 'обслуживание'" — wrong, no substring match
+
+---
+
 ## Pending / future
 
 - [ ] Multi-clinic files (one file = two clinics) — post-call decision when needed
 - [ ] Per-clinic comment column headers if other insurers use different header names
-- [ ] Tests for `clinic_matcher.py`
+- [ ] **Test coverage push** — the single highest-ROI action to stop the bug treadmill

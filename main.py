@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.7.1"
+__version__ = "1.8.0"
 
 import os
 import re
@@ -70,7 +70,28 @@ def _expand_env(obj):
 
 def load_config(path: str = 'config.yaml') -> dict:  # type: ignore[return]
     with open(path, 'r', encoding='utf-8') as f:
-        return _expand_env(yaml.safe_load(f))
+        config = _expand_env(yaml.safe_load(f))
+    if not isinstance(config, dict):
+        raise ValueError(f"Config file {path} is empty or invalid (expected dict, got {type(config).__name__})")
+    # Validate required keys exist and provide clear errors
+    required = {
+        'imap.server': ('imap', 'server'),
+        'imap.username': ('imap', 'username'),
+        'imap.password': ('imap', 'password'),
+        'processing.temp_folder': ('processing', 'temp_folder'),
+        'processing.processed_ids_file': ('processing', 'processed_ids_file'),
+    }
+    missing = []
+    for label, keys in required.items():
+        obj = config
+        for k in keys:
+            if not isinstance(obj, dict) or k not in obj:
+                missing.append(label)
+                break
+            obj = obj[k]
+    if missing:
+        raise ValueError(f"Config {path} missing required keys: {', '.join(missing)}")
+    return config
 
 
 @lru_cache(maxsize=1)
@@ -297,9 +318,20 @@ def _attach_monthly_if_last_day(config: dict, stats: dict) -> None:
     try:
         import pandas as pd
         df = pd.read_excel(master_path, dtype=str).fillna('')
-        month_suffix = today.strftime('%m.%Y')  # matches end of DD.MM.YYYY format
+        # Zero-padded month suffix: matches end of DD.MM.YYYY (e.g. "03.2026")
+        month_suffix = f"{today.month:02d}.{today.year}"
         if 'Дата обработки' in df.columns:
-            mask = df['Дата обработки'].str.endswith(month_suffix, na=False)
+            # Normalize dates before matching: "1.3.2026" → "01.03.2026"
+            def _norm(s):
+                parts = str(s).split('.')
+                if len(parts) == 3:
+                    try:
+                        return f"{int(parts[0]):02d}.{int(parts[1]):02d}.{parts[2]}"
+                    except ValueError:
+                        pass
+                return str(s)
+            normed = df['Дата обработки'].map(_norm)
+            mask = normed.str.endswith(month_suffix, na=False)
             monthly = df[mask].to_dict('records')
         else:
             monthly = df.to_dict('records')
@@ -402,12 +434,13 @@ def run_imap_mode(config: dict, dry_run: bool = False):
         attachments = fetcher.fetch_attachments(days_back=days_back)
 
         for att in attachments:
-            records_before = stats['total_records']
             process_file(att['filepath'], master_path, config, stats,
                         sender=att.get('sender', ''),
                         existing_keys=existing_keys, dry_run=dry_run,
                         pending=pending)
-            if stats['total_records'] > records_before and att.get('imap_id'):
+            # Always mark email as processed — dedup handles duplicates,
+            # no need to re-download and re-parse the same attachment every run
+            if att.get('imap_id'):
                 processed_imap_ids.append(att['imap_id'])
             try:
                 os.remove(att['filepath'])

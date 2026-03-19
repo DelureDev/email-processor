@@ -39,7 +39,11 @@ def detect_by_sender(sender: str) -> str | None:
         return None
     sender_lower = sender.lower()
     for sender_key, fmt in SENDER_FORMAT_MAP.items():
-        if sender_key in sender_lower:
+        # Exact email match or domain match (sender ends with @domain)
+        if sender_lower == sender_key or sender_lower.endswith('@' + sender_key):
+            return fmt
+        # Substring match for partial sender keys (e.g. 'spiskirobot')
+        if '@' not in sender_key and sender_key in sender_lower:
             return fmt
     return None
 

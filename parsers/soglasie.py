@@ -70,6 +70,9 @@ def parse(filepath: str) -> list[dict]:
 
     headers = build_header_map(df, header_row)
     col_familia = find_col(headers, 'фамилия')
+    if col_familia is None:
+        logger.error(f"SOGLASIE: Could not find 'Фамилия' column in {filepath}")
+        return []
     col_imya = find_col(headers, 'имя')
     col_otchestvo = find_col(headers, 'отчество')
     col_birth = first_col(headers, ('д/р',), ('дата', 'рожд'))

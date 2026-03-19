@@ -28,7 +28,7 @@ python main.py --config path/to/config.yaml
 ```
 
 ```bash
-# Run test suite (50 tests)
+# Run test suite (87 tests)
 pytest tests/ -v
 
 # Run a single test file
@@ -103,7 +103,7 @@ This project uses **semantic versioning** (`MAJOR.MINOR.PATCH`):
 
 1. Update `__version__` in `main.py`
 2. Add an entry to `CHANGELOG.md` under the new version
-3. Commit, tag, and push:
+3. Commit, tag, and push — **always push to remote after committing** (don't wait to be asked):
 
 ```bash
 git add -A
@@ -131,7 +131,7 @@ git pull
 
 ## Fix history
 
-See `PLAN.md` for full version history and `CHANGELOG.md` for per-version details. Current version: **v1.7.1**.
+See `PLAN.md` for full version history and `CHANGELOG.md` for per-version details. Current version: **v1.8.0**.
 
 ## Security hardening
 

@@ -156,6 +156,8 @@ class IMAPFetcher:
         raise ConnectionError(f"Failed to connect after {retries} attempts: {last_exc}")
 
     def disconnect(self):
+        if not hasattr(self, 'mail'):
+            return
         try:
             self.mail.logout()
         except Exception:
@@ -232,10 +234,12 @@ class IMAPFetcher:
                     msg = email.message_from_bytes(msg_data[0][1])
                     message_id = msg.get('Message-ID', uid.decode())
                     monthly = _extract_monthly_pwd_from_msg(msg)
-                    if monthly and monthly['password'] not in zetta_passwords:
-                        zetta_passwords.insert(0, monthly['password'])
-                        logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
-                    self.processed_ids.add(message_id)
+                    if monthly:
+                        if monthly['password'] not in zetta_passwords:
+                            zetta_passwords.insert(0, monthly['password'])
+                            logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
+                        self.processed_ids.add(message_id)
+                    # If extraction returned None — do NOT mark processed, retry next run
                 except Exception as e:
                     logger.debug(f"Error reading password email: {e}")
 
@@ -283,10 +287,11 @@ class IMAPFetcher:
                 sender_addr = _extract_email_addr(decode_mime_header(msg.get('From', '')))
                 if is_zetta_monthly_password_email(sender_addr):
                     monthly = _extract_monthly_pwd_from_msg(msg)
-                    if monthly and monthly['password'] not in zetta_passwords:
-                        zetta_passwords.insert(0, monthly['password'])
-                        logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
-                    self.processed_ids.add(message_id)
+                    if monthly:
+                        if monthly['password'] not in zetta_passwords:
+                            zetta_passwords.insert(0, monthly['password'])
+                            logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
+                        self.processed_ids.add(message_id)
                 continue
 
             sender_raw = decode_mime_header(msg.get('From', ''))

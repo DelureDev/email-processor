@@ -41,7 +41,8 @@ def load_existing_keys(master_path: str) -> set:
         return keys
     try:
         dedup_cols = ['ФИО', '№ полиса', 'Начало обслуживания', 'Конец обслуживания', 'Клиника']
-        available = dedup_cols if all(c in pd.read_excel(master_path, nrows=0).columns for c in dedup_cols) else dedup_cols[:-1]
+        header_cols = set(pd.read_excel(master_path, nrows=0).columns)
+        available = dedup_cols if all(c in header_cols for c in dedup_cols) else dedup_cols[:-1]
         df = pd.read_excel(master_path, usecols=available)
         if 'Клиника' not in df.columns:
             df['Клиника'] = ''

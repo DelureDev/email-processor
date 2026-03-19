@@ -144,9 +144,12 @@ def unzip_with_password(zip_path: str, password: str, extract_to: str) -> list[s
     """
     os.makedirs(extract_to, exist_ok=True)
     extracted = []
+    MAX_ENTRY_SIZE = 100 * 1024 * 1024    # 100 MB per entry
+    MAX_TOTAL_SIZE = 500 * 1024 * 1024    # 500 MB cumulative
 
     try:
         with zipfile.ZipFile(zip_path, 'r') as zf:
+            total_extracted_size = 0
             for name in zf.namelist():
                 if name.lower().endswith(('.xlsx', '.xls')):
                     # Zip Slip guard
@@ -156,9 +159,13 @@ def unzip_with_password(zip_path: str, password: str, extract_to: str) -> list[s
                         continue
                     # Reject entries over 100 MB (zip bomb guard)
                     info = zf.getinfo(name)
-                    if info.file_size > 100 * 1024 * 1024:
+                    if info.file_size > MAX_ENTRY_SIZE:
                         logger.warning(f"Zip entry too large ({info.file_size} bytes), skipping: {name}")
                         continue
+                    # Cumulative size guard
+                    if total_extracted_size + info.file_size > MAX_TOTAL_SIZE:
+                        logger.warning(f"Cumulative extraction limit ({MAX_TOTAL_SIZE} bytes) reached, stopping: {name}")
+                        break
                     # Try cp866 first (7-Zip default for Cyrillic), fall back to utf-8
                     success = False
                     for encoding in ('cp866', 'utf-8'):
@@ -170,6 +177,7 @@ def unzip_with_password(zip_path: str, password: str, extract_to: str) -> list[s
                             continue
                     if not success:
                         continue
+                    total_extracted_size += info.file_size
                     extracted.append(full_path)
                     logger.info(f"Extracted: {name}")
 
