@@ -22,7 +22,7 @@
 - **`clinic_matcher` tests (#59)**: 9 tests for clinic keyword matching, longest-keyword-wins, extract_comment flag, missing clinics.yaml, policy comment extraction
 - **Dedup edge case tests (#59)**: `ё`→`е` normalization, date zero-padding, clinic-in-key differentiation
 - **Sender detection tests (#59)**: 8 tests for exact match, domain match, partial key, case insensitivity, all known senders
-- Test count: 50 → 87 (+37 new tests)
+- Test count: 50 → 103 (87 self-contained + 16 fixture-dependent)
 
 ## [1.7.1] - 2026-03-19
 ### Fixed (Low — code review v2)

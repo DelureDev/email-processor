@@ -28,7 +28,7 @@ python main.py --config path/to/config.yaml
 ```
 
 ```bash
-# Run test suite (87 tests)
+# Run test suite (103 tests; 16 skip without test_files/ fixtures)
 pytest tests/ -v
 
 # Run a single test file
@@ -89,6 +89,7 @@ All parsers import from `parsers/utils.py`:
 - `find_header_row(df, keywords, max_rows)` — scan for header row by keyword tuple
 - `build_header_map(df, header_row)` — build `{lowered_header: col_idx}` dict
 - `find_col(headers, *keywords)` — find column index by keyword match
+- `first_col(headers, *keyword_sets)` — try multiple keyword sets, return first match (replaces `find_col() or find_col()` chains that break on column 0)
 - `assemble_fio(df, row, col_f, col_i, col_o)` — combine split FIO columns
 - `get_cell_str(df, row, col)` — safe cell-to-string with None handling
 

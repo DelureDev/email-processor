@@ -120,7 +120,7 @@ email-processor/
 │   ├── processor.log    # Основной лог
 │   └── audit.log        # Аудит операций с паролями
 ├── CHANGELOG.md         # История версий
-└── processed_ids.json   # Отслеживание обработанных писем (legacy, заменён SQLite)
+└── processed_ids.db     # SQLite: отслеживание обработанных писем (мигрировано из JSON)
 ```
 
 ## Экспорт на сетевой диск (SMB/CIFS)
