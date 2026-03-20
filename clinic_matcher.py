@@ -76,9 +76,9 @@ _COMMENT_COLUMNS = [
 _COMMENT_ROW_KEYWORDS = ['поликлиническое', 'амбулаторно', 'стоматологическое', 'программа']
 
 
-def detect_clinic(filepath: str, config_path: str = 'clinics.yaml') -> tuple[str, bool, str]:
+def detect_clinic(filepath: str, config_path: str = 'clinics.yaml', subject: str = None) -> tuple[str, bool, str]:
     """
-    Scan file for clinic keywords.
+    Scan file and email subject for clinic keywords.
     Returns (clinic_name, extract_comment, clinic_id) tuple.
     clinic_name is '⚠️ Не определено' if no match found.
     extract_comment is True if this clinic has extract_comment: true in clinics.yaml.
@@ -88,7 +88,10 @@ def detect_clinic(filepath: str, config_path: str = 'clinics.yaml') -> tuple[str
     if not clinics:
         return '⚠️ Не определено', False, ''
 
+    # Combine file content + email subject for keyword matching
     text = _file_to_text(filepath)
+    if subject:
+        text = (text or '') + ' ' + subject.lower()
     if not text:
         return '⚠️ Не определено', False, ''
 

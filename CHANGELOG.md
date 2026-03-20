@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.9.4] - 2026-03-20
+### Fixed
+- **Alfa parser missing dates for открепление**: recognizes `"Дата открепления с"` / `"Дата открепления по"` as single-cell date headers, and `"Дата открепления"` / `"Дата прикрепления"` as end/start date columns.
+- **VSK clinic not detected**: `detect_clinic()` now also scans the email subject line for clinic keywords — VSK always includes the clinic name in the subject (e.g. `"ВСК _ открепление _ ... _ ООО «Детский Госпиталь»"`). Subject is passed through the pipeline via `process_file(subject=...)`.
+
 ## [1.9.3] - 2026-03-20
 ### Fixed
 - **Dead network mount blocks email report**: `_export_to_network()` now checks mount accessibility with a 10s timeout before writing — prevents `os.path.exists()` hanging on dead NFS mounts. Email report and healthcheck always sent first, network export runs last.

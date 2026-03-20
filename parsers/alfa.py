@@ -53,6 +53,18 @@ def parse(filepath: str) -> list[dict]:
                     col_birth = ci
                 elif 'группа' in h or 'договор' in h or 'организац' in h:
                     col_group = ci
+                # Handle merged date headers: "Дата открепления с" / "Дата открепления по"
+                # or "Период с" / "Период по" as single cells
+                elif ('дата' in h or 'период' in h) and h.rstrip().endswith(' с'):
+                    col_start = ci
+                elif ('дата' in h or 'период' in h) and h.rstrip().endswith(' по'):
+                    col_end = ci
+                # "Дата открепления" without с/по — treat as end date (открепление = detachment)
+                elif 'дата' in h and 'откреплен' in h:
+                    col_end = ci
+                # "Дата прикрепления" — treat as start date
+                elif 'дата' in h and 'прикреплен' in h:
+                    col_start = ci
             # Check next row for "с" / "по" sub-headers
             if hi + 1 < len(df):
                 for ci in range(len(df.columns)):

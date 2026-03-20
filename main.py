@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.9.3"
+__version__ = "1.9.4"
 
 import os
 import re
@@ -170,7 +170,7 @@ def _quarantine(filepath: str, config: dict) -> None:
 
 
 def process_file(filepath: str, master_path: str, config: dict, stats: dict,
-                 sender: str = None,
+                 sender: str = None, subject: str = None,
                  existing_keys: set | None = None, dry_run: bool = False,
                  pending: list | None = None) -> int:
     """Process a single file. Returns number of new records written."""
@@ -222,7 +222,7 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
 
     # Detect clinic (once per file) and inject into all records BEFORE dedup,
     # because Клиника is part of the dedup key.
-    clinic, need_comment, clinic_id = detect_clinic(filepath)
+    clinic, need_comment, clinic_id = detect_clinic(filepath, subject=subject)
     comment = ''
     if need_comment:
         comment = extract_policy_comment(filepath)
@@ -474,6 +474,7 @@ def run_imap_mode(config: dict, dry_run: bool = False):
         for att in attachments:
             process_file(att['filepath'], master_path, config, stats,
                         sender=att.get('sender', ''),
+                        subject=att.get('subject', ''),
                         existing_keys=existing_keys, dry_run=dry_run,
                         pending=pending)
             # Always mark email as processed — dedup handles duplicates,
