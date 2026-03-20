@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.3] - 2026-03-20
+### Fixed
+- **Dead network mount blocks email report**: `_export_to_network()` now checks mount accessibility with a 10s timeout before writing — prevents `os.path.exists()` hanging on dead NFS mounts. Email report and healthcheck always sent first, network export runs last.
+- **Re-ingestion of own report emails**: fetcher now skips emails with "Обработка списков ДМС" in subject to prevent parsing yesterday's attached `records_*.xlsx` as new data.
+- **Auto-migrate old master.xlsx layout**: writer detects missing `Клиника`/`Комментарий в полис` columns and inserts them automatically (shifts Источник/Дата обработки right). Previously wrote data into wrong columns.
+- **Test mode crash**: `run_test_mode` unpacked 2 values from `detect_clinic()` which now returns 3 (since v1.9.0).
+
 ## [1.9.2] - 2026-03-19
 ### Fixed
 - **Network CSV backward compatibility**: existing CSV files on network share (daily + monthly) are automatically migrated when `ID Клиники` column is missing — inserts new column after `Клиника` with empty values for old rows, then appends new data normally. No manual deletion needed.

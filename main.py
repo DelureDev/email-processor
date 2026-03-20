@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.9.2"
+__version__ = "1.9.3"
 
 import os
 import re
@@ -321,11 +321,29 @@ def _attach_monthly_if_last_day(config: dict, stats: dict) -> None:
 
 
 def _export_to_network(config: dict, stats: dict) -> None:
-    """Write daily delta CSV and monthly master CSV to network folder if configured."""
+    """Write daily delta CSV and monthly master CSV to network folder if configured.
+    Runs with a timeout to avoid hanging on dead network mounts."""
     folder = config.get('output', {}).get('csv_export_folder', '').strip()
     if not folder or not stats.get('new_records'):
         return
     logger = logging.getLogger(__name__)
+
+    # Quick accessibility check with timeout — dead NFS mounts hang os.path.exists()
+    import concurrent.futures
+    timeout_sec = config.get('output', {}).get('network_timeout', 10)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(os.path.isdir, folder)
+        try:
+            reachable = future.result(timeout=timeout_sec)
+        except concurrent.futures.TimeoutError:
+            logger.error(f"Network share not reachable (timed out after {timeout_sec}s): {folder}")
+            stats['errors'].append(f"Network share timed out: {folder}")
+            return
+        if not reachable:
+            logger.error(f"Network share folder does not exist: {folder}")
+            stats['errors'].append(f"Network share not found: {folder}")
+            return
+
     import csv
     from writer import COLUMNS, _safe
 
@@ -498,10 +516,11 @@ def run_imap_mode(config: dict, dry_run: bool = False):
     _print_summary(stats)
 
     if not dry_run:
-        _export_to_network(config, stats)
+        # Send email report FIRST — network export must never block notification
         _attach_monthly_if_last_day(config, stats)
         from notifier import send_report
         send_report(config, stats)
+        _export_to_network(config, stats)
 
     # Healthcheck ping — always fires so we know if cron stopped running
     _ping_healthcheck(config, stats)
@@ -538,10 +557,10 @@ def run_local_mode(folder: str, config: dict, dry_run: bool = False):
     _print_summary(stats)
 
     if not dry_run:
-        _export_to_network(config, stats)
         _attach_monthly_if_last_day(config, stats)
         from notifier import send_report
         send_report(config, stats)
+        _export_to_network(config, stats)
 
     return stats
 
@@ -594,7 +613,7 @@ def run_test_mode(folder: str, config: dict):
             print(f"[---]  EMPTY: {filename} (format: {fmt})")
             continue
 
-        clinic, need_comment = detect_clinic(filepath)
+        clinic, need_comment, clinic_id = detect_clinic(filepath)
         comment = extract_policy_comment(filepath) if need_comment else ''
         total += len(records)
         print(f"[OK]  {fmt.upper():12s} | {len(records):3d} records | {filename} | clinic: {clinic}")

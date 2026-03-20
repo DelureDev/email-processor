@@ -177,6 +177,27 @@ def _safe(value) -> object:
     return value
 
 
+def _migrate_xlsx_columns(ws):
+    """Migrate old-layout worksheet by inserting Клиника and Комментарий в полис columns.
+    Old layout: ФИО|ДР|Полис|Начало|Конец|СК|Страхователь|Источник|Дата обр
+    New layout: ...same...|Клиника|Комментарий|Источник|Дата обр
+    Shifts Источник файла and Дата обработки right by 2 to make room."""
+    # Insert two columns before 'Источник файла' (was col 8, now cols 8-9 are new)
+    ws.insert_cols(8, 2)
+    # Set new headers
+    ws.cell(row=1, column=8, value='Клиника').font = HEADER_FONT
+    ws.cell(row=1, column=8).fill = HEADER_FILL
+    ws.cell(row=1, column=8).alignment = HEADER_ALIGNMENT
+    ws.cell(row=1, column=8).border = THIN_BORDER
+    ws.cell(row=1, column=9, value='Комментарий в полис').font = HEADER_FONT
+    ws.cell(row=1, column=9).fill = HEADER_FILL
+    ws.cell(row=1, column=9).alignment = HEADER_ALIGNMENT
+    ws.cell(row=1, column=9).border = THIN_BORDER
+    # Set column widths for new columns
+    ws.column_dimensions[get_column_letter(8)].width = COLUMN_WIDTHS.get('Клиника', 20)
+    ws.column_dimensions[get_column_letter(9)].width = COLUMN_WIDTHS.get('Комментарий в полис', 20)
+
+
 def _populate_styled_worksheet(ws, records: list[dict]):
     """Populate a worksheet with styled headers and data rows."""
     for col_idx, col_name in enumerate(COLUMNS, 1):
@@ -233,10 +254,19 @@ def _append_to_existing(records: list[dict], path: str):
             raise ValueError(f"Sheet 'Данные' not found in {path}. Available sheets: {wb.sheetnames}")
         ws = wb['Данные']
 
-        # Validate column order matches expected COLUMNS
-        existing_headers = [ws.cell(row=1, column=c).value for c in range(1, len(COLUMNS) + 1)]
+        # Validate column order — auto-migrate if old layout is detected
+        existing_headers = [ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)]
         if existing_headers != COLUMNS:
-            logger.warning(f"Column mismatch in {path}: expected {COLUMNS}, got {existing_headers}")
+            # Check if this is the known old layout (missing Клиника, Комментарий в полис)
+            old_layout = ['ФИО', 'Дата рождения', '№ полиса', 'Начало обслуживания',
+                          'Конец обслуживания', 'Страховая компания', 'Страхователь',
+                          'Источник файла', 'Дата обработки']
+            actual_non_none = [h for h in existing_headers if h is not None]
+            if actual_non_none == old_layout:
+                logger.info(f"Migrating {path} columns from old layout → adding Клиника, Комментарий в полис")
+                _migrate_xlsx_columns(ws)
+            else:
+                logger.warning(f"Column mismatch in {path}: expected {COLUMNS}, got {existing_headers}")
 
         # Find actual last data row (max_row may include empty styled rows)
         next_row = ws.max_row + 1

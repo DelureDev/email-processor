@@ -324,6 +324,11 @@ class IMAPFetcher:
             subject = decode_mime_header(msg.get('Subject', ''))
             date = msg.get('Date', '')
 
+            # Skip own report emails to prevent re-ingesting processed data
+            if 'Обработка списков ДМС' in subject:
+                self.processed_ids.add(message_id)
+                continue
+
             # If password-zip email (Zetta or Sber) — check for passwords in body
             if is_password_zip_email(sender):
                 # First check if it's a monthly password email
