@@ -10,14 +10,24 @@ from collections import defaultdict
 config = load_config()
 setup_logging(config)
 
-# Read today's records from master
+# Read today's records from backup (cleanup_rerun.py removed them from master)
 master = config.get('output', {}).get('master_file', './output/master.xlsx')
-df = pd.read_excel(master, dtype=str).fillna('')
+backup = master.replace('.xlsx', '_pre_rerun.xlsx')
+import os
+source = backup if os.path.exists(backup) else master
+df = pd.read_excel(source, dtype=str).fillna('')
 today_mask = df['Дата обработки'].map(lambda s: norm_date_pad(str(s))) == '20.03.2026'
 today_df = df[today_mask]
 records = today_df.to_dict('records')
 
-print(f"Found {len(records)} records for 20.03.2026")
+print(f"Found {len(records)} records for 20.03.2026 (from {os.path.basename(source)})")
+
+# Restore records to master if they were removed
+if source == backup and records:
+    from writer import write_batch_to_master
+    batch = [(records, 'restored_from_backup')]
+    write_batch_to_master(batch, master)
+    print(f"Restored {len(records)} records to master.xlsx")
 
 if not records:
     print("No records found, nothing to send.")
