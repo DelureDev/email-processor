@@ -28,7 +28,7 @@ python main.py --config path/to/config.yaml
 ```
 
 ```bash
-# Run test suite (103 tests; 16 skip without test_files/ fixtures)
+# Run test suite (88 pass, 16 skip without test_files/ fixtures)
 pytest tests/ -v
 
 # Run a single test file
@@ -46,7 +46,7 @@ Production VM: deploy via `git push` then `git pull` on VM.
 **Pipeline flow (IMAP mode):**
 `fetcher.py` → `detector.py` → `parsers/` → `clinic_matcher.py` → `writer.py` → `notifier.py`
 
-1. **`fetcher.py` (`IMAPFetcher`)** — connects to IMAP, filters emails by subject keywords, downloads `.xlsx`/`.xls`/`.zip` attachments to `./temp/`. Tracks processed message IDs (RFC 2822 `Message-ID` only) in SQLite (capped at 5000 entries) to avoid reprocessing. Two-pass logic: first collects all passwords from Zetta/Sber password emails, then extracts password-protected zips in a second pass. After processing, moves emails that produced new records to the configured folder (`imap.processed_folder`, e.g. `"Обработанные"`) via COPY + DELETE + EXPUNGE.
+1. **`fetcher.py` (`IMAPFetcher`)** — connects to IMAP, filters emails by subject keywords, downloads `.xlsx`/`.xls`/`.zip` attachments to `./temp/`. Skips own report emails (`"Обработка списков ДМС"` in subject). Tracks processed message IDs (RFC 2822 `Message-ID` only) in SQLite (capped at 5000 entries) to avoid reprocessing. Two-pass logic: first collects all passwords from Zetta/Sber password emails, then extracts password-protected zips in a second pass. Emails are moved to the configured folder (`imap.processed_folder`, e.g. `"Обработанные"`) only AFTER batch write succeeds — if write fails, emails stay in INBOX for re-fetch.
 
 2. **`zetta_handler.py`** — all logic for password-protected ZIPs (Zetta Insurance and Sberbank). Handles two Zetta password flows: monthly passwords from `parollpu@zettains.ru` and per-email passwords from `pulse.letter@zettains.ru`. `try_passwords()` tries cp866 then utf-8 encoding for each password. Zip Slip guard validates extracted paths stay inside extraction directory.
 
@@ -57,13 +57,13 @@ Production VM: deploy via `git push` then `git pull` on VM.
 
 4. **`parsers/`** — one `.py` file per insurer, each exports a `parse(filepath) -> list[dict]` function. Registered in `parsers/__init__.py` as the `PARSERS` dict mapping format name → function. All parsers return records with the canonical 7-field schema: `ФИО`, `Дата рождения`, `№ полиса`, `Начало обслуживания`, `Конец обслуживания`, `Страховая компания`, `Страхователь`. (`Клиника`, `Комментарий в полис`, `Источник файла`, `Дата обработки` are added by `main.py`/`writer.py`.)
 
-5. **`clinic_matcher.py`** — runs once per file after parsing. `detect_clinic(filepath)` returns `(clinic_name, extract_comment)`. Scans the entire xlsx content as lowercased text against `clinics.yaml` keywords (longest-first to prevent partial matches). No match → `"⚠️ Не определено"`. If `extract_comment=True`, `extract_policy_comment(filepath)` is also called — two strategies: (1) scan rows 0-19 for known column headers (`_COMMENT_COLUMNS`), take first non-empty data cell below; (2) scan all rows for free-text cells >20 chars containing program description keywords.
+5. **`clinic_matcher.py`** — runs once per file after parsing. `detect_clinic(filepath, subject=None)` returns `(clinic_name, extract_comment, clinic_id)`. Scans both the xlsx content (first 50 rows, lowercased) and the email subject against `clinics.yaml` keywords (longest-first to prevent partial matches). Subject scanning is essential for VSK where clinic name is in the email subject, not the file. No match → `"⚠️ Не определено"`. If `extract_comment=True`, `extract_policy_comment(filepath)` is also called — two strategies: (1) scan rows 0-19 for known column headers (`_COMMENT_COLUMNS`), take first non-empty data cell below; (2) scan all rows for free-text cells >20 chars containing program description keywords.
 
-6. **`clinics.yaml`** — configurable clinic lookup table. Each entry has `name`, `keywords` list, and optional `extract_comment: true` flag. Keywords sorted longest-first automatically at load time. Add new clinics here without touching Python code.
+6. **`clinics.yaml`** — configurable clinic lookup table. Each entry has `name`, `id` (for 1C), `keywords` list, and optional `extract_comment: true` flag. Keywords sorted longest-first automatically at load time. Add new clinics here without touching Python code.
 
-7. **`writer.py`** — appends records to `master.xlsx` (openpyxl). Creates styled file with header row if it doesn't exist; appends to existing. `load_existing_keys()` uses vectorized pandas ops with `usecols=` to load the 5 dedup columns (backward-compat fallback for master files without `Клиника` column). Also incrementally appends to `master.csv` (UTF-8 BOM, semicolon delimiter) after every write.
+7. **`writer.py`** — appends records to `master.xlsx` (openpyxl). Creates styled file with header row if it doesn't exist; appends to existing. Auto-migrates old-layout files (inserts missing `Клиника`/`Комментарий в полис` columns). `load_existing_keys()` uses `pd.read_excel(dtype=str)` with `usecols=` to load the 5 dedup columns — raises `RuntimeError` on failure to prevent silent mass duplication. CSV backup (`master.csv`) written inside the file lock alongside xlsx.
 
-8. **`main.py`** — CLI entry point. Deduplication key is `(ФИО.upper().replace('Ё','Е'), № полиса, Начало обслуживания, Конец обслуживания, Клиника)`. The `stats` dict is passed by reference through the pipeline and populated by `process_file()`. On last day of month, `_attach_monthly_if_last_day()` filters master.xlsx for current-month records and attaches as xlsx to the email report.
+8. **`main.py`** — CLI entry point. `process_file(filepath, ..., sender=None, subject=None)` handles detection, parsing, clinic matching, and dedup for a single file. Deduplication key is `(ФИО.upper().replace('Ё','Е'), № полиса, Начало обслуживания, Конец обслуживания, Клиника)`. Execution order in IMAP mode: fetch → parse → write batch → move emails to processed → send email report → export to network share (with 10s timeout) → healthcheck ping. On last day of month, `_attach_monthly_if_last_day()` filters master.xlsx for current-month records and attaches as xlsx to the email report.
 
 ## Adding a new insurer
 
@@ -80,6 +80,7 @@ Production VM: deploy via `git push` then `git pull` on VM.
 Key config options added since v1.0:
 - `imap.processed_folder` — folder name to move processed emails into (e.g. `"Обработанные"`)
 - `output.csv_export_folder` — network share path for daily + monthly CSV export
+- `output.network_timeout` — seconds to wait for network share accessibility (default: 10)
 - `clinics.yaml` — separate file, not inside `config.yaml`
 
 ## Shared parser utilities
@@ -132,13 +133,13 @@ git pull
 
 ## Fix history
 
-See `PLAN.md` for full version history and `CHANGELOG.md` for per-version details. Current version: **v1.9.0**.
+See `CHANGELOG.md` for per-version details. Current version: **v1.9.5**.
 
 ## Security hardening
 
 - **Credentials** — `config.yaml` uses `${IMAP_PASSWORD}` / `${SMTP_PASSWORD}` env vars. Never commit plaintext credentials.
 - **Formula injection** — `writer.py` sanitizes cell values starting with `=`, `+`, `-`, `@` to prevent xlsx formula injection.
-- **File locking** — `writer.py` acquires exclusive `fcntl` lock around master.xlsx writes (prevents data corruption from overlapping cron runs).
+- **File locking** — `writer.py` acquires exclusive `fcntl` lock around master.xlsx and master.csv writes (prevents data corruption from overlapping cron runs).
 - **SMTP timeout** — 30s timeout on all SMTP operations in `notifier.py`.
 - **Audit log** — separate `audit` logger writing to `./logs/audit.log`. Events: `ZETTA_MONTHLY_PASSWORD_EXTRACTED`, `PASSWORD_EXTRACTED`, `ZIP_EXTRACT`. Never logs actual password values. Override path via `config.yaml` → `logging.audit_file`.
 

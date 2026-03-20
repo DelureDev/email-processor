@@ -44,7 +44,7 @@ def load_existing_keys(master_path: str) -> set:
         dedup_cols = ['ФИО', '№ полиса', 'Начало обслуживания', 'Конец обслуживания', 'Клиника']
         header_cols = set(pd.read_excel(master_path, nrows=0).columns)
         available = dedup_cols if all(c in header_cols for c in dedup_cols) else dedup_cols[:-1]
-        df = pd.read_excel(master_path, usecols=available)
+        df = pd.read_excel(master_path, usecols=available, dtype=str)
         if 'Клиника' not in df.columns:
             df['Клиника'] = ''
 
@@ -56,7 +56,8 @@ def load_existing_keys(master_path: str) -> set:
 
         keys = set(zip(df['ФИО'], df['№ полиса'], df['Начало обслуживания'], df['Конец обслуживания'], df['Клиника']))
     except Exception as e:
-        logger.error(f"Error loading existing keys: {e}")
+        logger.error(f"Error loading existing keys from {master_path}: {e}")
+        raise RuntimeError(f"Cannot load dedup keys: {e}") from e
     return keys
 
 HEADER_FONT = Font(name='Arial', bold=True, size=11, color='FFFFFF')
@@ -137,8 +138,9 @@ def write_batch_to_master(batch: list[tuple[list[dict], str]], master_path: str)
         else:
             _create_new(all_records, master_path)
 
+        _export_csv(master_path, all_records)
+
     logger.info(f"Wrote {len(all_records)} records ({len(batch)} files) to {master_path}")
-    _export_csv(master_path, all_records)
 
 
 def _export_csv(master_path: str, new_records: list[dict]) -> None:

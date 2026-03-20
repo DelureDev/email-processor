@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.9.5] - 2026-03-20
+### Security
+- **Dedup key float mismatch**: `load_existing_keys()` now reads with `dtype=str` — previously pandas could read policy numbers as floats (`12345` → `"12345.0"`), causing dedup to silently fail and accumulate duplicates.
+- **CSV backup inside file lock**: `_export_csv()` now runs inside `_master_lock`, preventing interleaved/corrupted rows from overlapping cron runs.
+
+### Fixed
+- **`load_existing_keys` raises on error**: previously returned empty set on read failure, causing entire master to be duplicated on next write. Now raises `RuntimeError` to abort the run.
+- **Batch write before email move**: emails are now moved to Обработанные and IDs saved only AFTER `write_batch_to_master` succeeds — prevents data loss if write fails.
+- **`detect_clinic`/`extract_policy_comment` crash-safe**: wrapped in try/except inside `process_file()` — a corrupted file no longer kills the entire pipeline.
+
 ## [1.9.4] - 2026-03-20
 ### Fixed
 - **Alfa parser missing dates for открепление**: recognizes `"Дата открепления с"` / `"Дата открепления по"` as single-cell date headers, and `"Дата открепления"` / `"Дата прикрепления"` as end/start date columns.

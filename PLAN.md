@@ -1,6 +1,6 @@
 # Project Status
 
-Current version: **v1.9.0** | Tests: **104** (88 pass, 16 fixture-dependent skip) | Production-ready
+Current version: **v1.9.5** | Tests: **104** (88 pass, 16 fixture-dependent skip) | Production-ready
 
 ---
 
@@ -21,8 +21,13 @@ Current version: **v1.9.0** | Tests: **104** (88 pass, 16 fixture-dependent skip
 | v1.8.3 | 2026-03-19 | Full audit: diagnostic.py overhaul, security fixes, .gitignore cleanup (8 fixes) |
 | v1.8.4 | 2026-03-19 | Shared dedup key, shared xlsx builder, env var warnings, healthcheck validation (10 fixes) |
 | v1.9.0 | 2026-03-19 | New feature: `ID Клиники` column in network share CSVs for 1C integration |
+| v1.9.1 | 2026-03-19 | Fix IMAP move crash on Cyrillic folder name (Обработанные) |
+| v1.9.2 | 2026-03-19 | Auto-migrate existing network CSVs for ID Клиники column |
+| v1.9.3 | 2026-03-20 | Dead network mount timeout, email-before-export order, self-ingestion guard, xlsx column migration |
+| v1.9.4 | 2026-03-20 | Alfa открепление dates, VSK clinic from email subject |
+| v1.9.5 | 2026-03-20 | Code review v7: dedup dtype=str, CSV inside lock, load_existing_keys raises on error, write-before-move |
 
-**Total: 6 review rounds, 90+ issues found and fixed.**
+**Total: 7 review rounds, 100+ issues found and fixed.**
 
 ---
 
@@ -64,7 +69,7 @@ None of these are blockers. All are code quality / maintainability improvements 
 | `requirements-dev.txt` | New devs don't know to install pytest | Add file: `pytest>=7.0` |
 | `os.makedirs()` permissions | Default umask may be too permissive on shared Linux | Add `mode=0o750` to `makedirs()` calls for temp/logs/quarantine |
 | `Дата обработки` stamped twice | `main.py` stamps it, then `writer.py` stamps it again — diverges on midnight runs | Pick one location, remove the other |
-| Inconsistent `dtype=str` in 6 parsers | Some parsers pass `dtype=str` to `read_excel`, some don't | Add `dtype=str` to all — prevents float coercion of policy numbers |
+| Inconsistent `dtype=str` in 6 parsers | Some parsers pass `dtype=str` to `read_excel`, some don't — `load_existing_keys` fixed in v1.9.5 | Add `dtype=str` to remaining parsers that lack it |
 
 ---
 

@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.9.4"
+__version__ = "1.9.5"
 
 import os
 import re
@@ -222,10 +222,17 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
 
     # Detect clinic (once per file) and inject into all records BEFORE dedup,
     # because Клиника is part of the dedup key.
-    clinic, need_comment, clinic_id = detect_clinic(filepath, subject=subject)
+    try:
+        clinic, need_comment, clinic_id = detect_clinic(filepath, subject=subject)
+    except Exception as e:
+        logger.warning(f"Clinic detection failed for {filename}: {e}")
+        clinic, need_comment, clinic_id = '⚠️ Не определено', False, ''
     comment = ''
     if need_comment:
-        comment = extract_policy_comment(filepath)
+        try:
+            comment = extract_policy_comment(filepath)
+        except Exception as e:
+            logger.warning(f"Comment extraction failed for {filename}: {e}")
     records = [{**r, 'Клиника': clinic, 'ID Клиники': clinic_id, 'Комментарий в полис': comment} for r in records]
 
     if clinic == '⚠️ Не определено':
@@ -501,7 +508,14 @@ def run_imap_mode(config: dict, dry_run: bool = False):
     except Exception as e:
         logger.error(f"IMAP error: {e}", exc_info=True)
         stats['errors'].append(f"IMAP error: {e}")
-    finally:
+
+    # Write batch BEFORE marking emails as processed — if write fails,
+    # emails stay in inbox and will be re-fetched on next run (no data loss).
+    if pending and not dry_run:
+        write_batch_to_master(pending, master_path)
+
+    # Move emails and save IDs only AFTER successful write
+    try:
         if not dry_run:
             dest = config.get('imap', {}).get('processed_folder', '').strip()
             if dest and processed_imap_ids:
@@ -509,10 +523,8 @@ def run_imap_mode(config: dict, dry_run: bool = False):
             fetcher._save_processed_ids()
         else:
             logger.info("Dry-run: not saving processed IDs")
+    finally:
         fetcher.disconnect()
-
-    if pending and not dry_run:
-        write_batch_to_master(pending, master_path)
 
     _print_summary(stats)
 
