@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.9.6] - 2026-03-21
+### Fixed
+- **Sync clinic IDs with production**: `clinics.yaml` IDs updated to match 1C mapping on VM (IDs had been corrected on VM directly)
+
 ## [1.9.5] - 2026-03-20
 ### Security
 - **Dedup key float mismatch**: `load_existing_keys()` now reads with `dtype=str` — previously pandas could read policy numbers as floats (`12345` → `"12345.0"`), causing dedup to silently fail and accumulate duplicates.
