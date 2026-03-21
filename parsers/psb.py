@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 def parse(filepath: str) -> list[dict]:
     """Parse PSB Strakhovanie format xlsx."""
-    df = pd.read_excel(filepath, sheet_name=0, header=None)
+    df = pd.read_excel(filepath, sheet_name=0, header=None, dtype=str)
     results = []
 
     header_row = find_header_row(df, ('фамилия', 'полис'), max_rows=20)

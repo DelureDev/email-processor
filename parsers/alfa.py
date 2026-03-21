@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 def parse(filepath: str) -> list[dict]:
     """Parse AlfaStrah format xlsx and return list of normalized records."""
-    df = pd.read_excel(filepath, sheet_name=0, header=None)
+    df = pd.read_excel(filepath, sheet_name=0, header=None, dtype=str)
     results = []
 
     # Defaults (overridden by header detection below)

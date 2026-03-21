@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def parse(filepath: str) -> list[dict]:
     """Parse Kapital Life format."""
-    df = pd.read_excel(filepath, sheet_name=0, header=None)
+    df = pd.read_excel(filepath, sheet_name=0, header=None, dtype=str)
     results = []
 
     # Find header row — look for row with "Фамилия" or "Ф.И.О." and "Полис"

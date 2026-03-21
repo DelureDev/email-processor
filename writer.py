@@ -51,6 +51,7 @@ def load_existing_keys(master_path: str) -> set:
         for col in available:
             df[col] = df[col].map(lambda v: clean_dedup_val(v))
         df['ФИО'] = df['ФИО'].str.upper().str.replace('Ё', 'Е', regex=False)
+        df['Клиника'] = df['Клиника'].str.upper()
         for col in ['Начало обслуживания', 'Конец обслуживания']:
             df[col] = df[col].map(norm_date_pad)
 

@@ -107,7 +107,7 @@ def record_key(record: dict) -> tuple:
         clean_dedup_val(record.get('№ полиса', '')),
         norm_date_pad(clean_dedup_val(record.get('Начало обслуживания', ''))),
         norm_date_pad(clean_dedup_val(record.get('Конец обслуживания', ''))),
-        clean_dedup_val(record.get('Клиника', '')),
+        clean_dedup_val(record.get('Клиника', '')).upper(),
     )
 
 

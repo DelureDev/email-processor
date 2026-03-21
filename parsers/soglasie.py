@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def parse(filepath: str) -> list[dict]:
     """Parse Soglasie format xlsx."""
-    df = pd.read_excel(filepath, sheet_name=0, header=None)
+    df = pd.read_excel(filepath, sheet_name=0, header=None, dtype=str)
     results = []
 
     # Extract metadata: dates and organization from upper rows

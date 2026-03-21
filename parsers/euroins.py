@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 def parse(filepath: str) -> list[dict]:
     """Parse Euroins format xlsx."""
-    df = pd.read_excel(filepath, sheet_name=0, header=None)
+    df = pd.read_excel(filepath, sheet_name=0, header=None, dtype=str)
     results = []
 
     # Extract dates from header rows ("Прикрепление с ... по ..." or "Открепление с ...")

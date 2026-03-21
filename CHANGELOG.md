@@ -1,8 +1,11 @@
 # Changelog
 
-## [1.9.6] - 2026-03-21
+## [1.9.7] - 2026-03-21
 ### Fixed
-- **Sync clinic IDs with production**: `clinics.yaml` IDs updated to match 1C mapping on VM (IDs had been corrected on VM directly)
+- **Standardize `dtype=str` across all parsers**: 12 parsers were missing `dtype=str` in `pd.read_excel()`, risking float coercion of policy numbers (e.g. `12345` → `12345.0`)
+- **Case-normalize `Клиника` in dedup key**: prevents false duplicates if clinic name casing ever varies
+- **Sync clinic IDs with production**: `clinics.yaml` IDs updated to match 1C mapping on VM
+- **CLAUDE.md version updated** to match actual release
 
 ## [1.9.5] - 2026-03-20
 ### Security
