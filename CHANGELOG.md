@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.9.11] - 2026-03-24
+### Fixed
+- **Pipeline survives write failure**: `write_batch_to_master` now wrapped in try/except in both `run_imap_mode` and `run_local_mode`. On failure: error appended to `stats['errors']`, `processed_imap_ids` cleared (emails stay in INBOX for re-fetch), `new_records` and `total_records` reset. Email report and healthcheck still fire.
+
 ## [1.9.10] - 2026-03-24
 ### Fixed
 - **Network CSV export errors now in email report**: daily and monthly CSV write failures were only logged, not appended to `stats['errors']` — so the email report (moved before export in v1.9.8) still didn't show them. Now both are reported.

@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.9.10"
+__version__ = "1.9.11"
 
 import os
 import re
@@ -514,7 +514,15 @@ def run_imap_mode(config: dict, dry_run: bool = False):
     # Write batch BEFORE marking emails as processed — if write fails,
     # emails stay in inbox and will be re-fetched on next run (no data loss).
     if pending and not dry_run:
-        write_batch_to_master(pending, master_path)
+        try:
+            write_batch_to_master(pending, master_path)
+        except Exception as e:
+            logger.error(f"Failed to write batch to master: {e}", exc_info=True)
+            stats['errors'].append(f"Master write failed: {e}")
+            pending.clear()              # Signal: nothing was written
+            processed_imap_ids.clear()   # Don't move emails — re-fetch next run
+            stats['new_records'].clear() # Don't report records that weren't saved
+            stats['total_records'] = 0
 
     # Move emails and save IDs only AFTER successful write
     try:
@@ -568,7 +576,13 @@ def run_local_mode(folder: str, config: dict, dry_run: bool = False):
                     pending=pending)
 
     if pending and not dry_run:
-        write_batch_to_master(pending, master_path)
+        try:
+            write_batch_to_master(pending, master_path)
+        except Exception as e:
+            logger.error(f"Failed to write batch to master: {e}", exc_info=True)
+            stats['errors'].append(f"Master write failed: {e}")
+            stats['new_records'].clear()
+            stats['total_records'] = 0
 
     _print_summary(stats)
 
