@@ -86,7 +86,7 @@ def extract_monthly_password(body: str) -> dict | None:
         if 'в период с' in line:
             found_period = True
             continue
-        if found_period and 4 <= len(line) <= 30 and re.match(r'^[A-Za-z0-9!@#$%^&*()_+\-=]+$', line) and not line.startswith('Коммерческ') and not line.startswith('Настоящ'):
+        if found_period and 4 <= len(line) <= 30 and re.match(r'^[\x21-\x7e]+$', line):
             password = line.strip()
             logger.info(f"Found Zetta monthly password: {len(password)} chars (valid {valid_from} - {valid_to})")
             audit_logger.info(f"ZETTA_MONTHLY_PASSWORD_EXTRACTED len={len(password)} valid={valid_from}_{valid_to}")
@@ -185,7 +185,7 @@ def unzip_with_password(zip_path: str, password: str, extract_to: str) -> list[s
             # Maybe there are xlsx inside but also PDFs — log what's in there
             with zipfile.ZipFile(zip_path, 'r') as zf:
                 all_files = zf.namelist()
-                logger.info(f"Zip contents (no xlsx found): {all_files}")
+                logger.info(f"Zip extraction failed (wrong password?), contents: {all_files}")
 
     except RuntimeError as e:
         logger.error(f"Failed to extract {zip_path}: {e} (wrong password?)")

@@ -133,7 +133,7 @@ git pull
 
 ## Fix history
 
-See `CHANGELOG.md` for per-version details. Current version: **v1.9.8**.
+See `CHANGELOG.md` for per-version details. Current version: **v1.9.9**.
 
 ## Security hardening
 

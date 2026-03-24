@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.9.9] - 2026-03-24
+### Fixed
+- **Zetta monthly password regex too restrictive**: password `3RpNk%?}*t` was rejected because `%`, `?`, `{`, `}` weren't in the allowed charset. Replaced with `[\x21-\x7e]+` (any printable ASCII, no Cyrillic) — future-proof against password character changes.
+- **Misleading "no xlsx found" log message**: when password fails but zip contains xlsx files, now logs "wrong password?" instead of "no xlsx found".
+
 ## [1.9.8] - 2026-03-24
 ### Fixed
 - **Network export errors now visible in email report**: moved `_export_to_network()` before `send_report()` in both IMAP and local modes — previously export ran after email was sent, so timeouts/failures were only in VM logs and invisible to user. The 10s timeout still prevents hanging on dead mounts.
