@@ -2,7 +2,10 @@
 
 ## [1.9.11] - 2026-03-24
 ### Fixed
-- **Pipeline survives write failure**: `write_batch_to_master` now wrapped in try/except in both `run_imap_mode` and `run_local_mode`. On failure: error appended to `stats['errors']`, `processed_imap_ids` cleared (emails stay in INBOX for re-fetch), `new_records` and `total_records` reset. Email report and healthcheck still fire.
+- **Critical: pipeline survives write failure** — `write_batch_to_master` wrapped in try/except in both IMAP and local modes. On failure: error in email report, healthcheck pings /fail, emails stay in INBOX for re-fetch, stats cleared to avoid phantom record counts.
+- **`_attach_monthly_if_last_day` errors now in email report** — was only logging, same pattern as v1.9.10 CSV fix.
+- **Zetta zip extraction failures now in email report** — "All passwords failed" and "no passwords found" were only in VM logs, now surfaced via `stats['errors']`.
+- **Regression tests for Zetta password with `%?{}` characters** — the exact scenario from v1.9.9 now has test coverage (plaintext and HTML bold format).
 
 ## [1.9.10] - 2026-03-24
 ### Fixed
