@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.9.7"
+__version__ = "1.9.8"
 
 import os
 import re
@@ -529,11 +529,12 @@ def run_imap_mode(config: dict, dry_run: bool = False):
     _print_summary(stats)
 
     if not dry_run:
-        # Send email report FIRST — network export must never block notification
+        # Export to network share BEFORE email — timeout (10s) prevents hanging,
+        # and any errors will be included in the email report
+        _export_to_network(config, stats)
         _attach_monthly_if_last_day(config, stats)
         from notifier import send_report
         send_report(config, stats)
-        _export_to_network(config, stats)
 
     # Healthcheck ping — always fires so we know if cron stopped running
     _ping_healthcheck(config, stats)
@@ -570,10 +571,10 @@ def run_local_mode(folder: str, config: dict, dry_run: bool = False):
     _print_summary(stats)
 
     if not dry_run:
+        _export_to_network(config, stats)
         _attach_monthly_if_last_day(config, stats)
         from notifier import send_report
         send_report(config, stats)
-        _export_to_network(config, stats)
 
     return stats
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.9.8] - 2026-03-24
+### Fixed
+- **Network export errors now visible in email report**: moved `_export_to_network()` before `send_report()` in both IMAP and local modes — previously export ran after email was sent, so timeouts/failures were only in VM logs and invisible to user. The 10s timeout still prevents hanging on dead mounts.
+
 ## [1.9.7] - 2026-03-21
 ### Fixed
 - **Standardize `dtype=str` across all parsers**: 12 parsers were missing `dtype=str` in `pd.read_excel()`, risking float coercion of policy numbers (e.g. `12345` → `12345.0`)
