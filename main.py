@@ -512,6 +512,11 @@ def run_imap_mode(config: dict, dry_run: bool = False):
         logger.error(f"IMAP error: {e}", exc_info=True)
         stats['errors'].append(f"IMAP error: {e}")
 
+    # Surface Zetta zip failures in email report
+    if fetcher.failed_zips:
+        for name in fetcher.failed_zips:
+            stats['errors'].append(f"Zetta zip not extracted: {name}")
+
     # Write batch BEFORE marking emails as processed — if write fails,
     # emails stay in inbox and will be re-fetched on next run (no data loss).
     if pending and not dry_run:

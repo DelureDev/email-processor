@@ -79,6 +79,7 @@ class IMAPFetcher:
         self.dry_run = dry_run
         self.processed_ids = self._load_processed_ids()
         self._initial_ids = set(self.processed_ids)  # snapshot — only new IDs saved to DB
+        self.failed_zips = []
 
         os.makedirs(self.temp_folder, exist_ok=True)
 
@@ -239,6 +240,7 @@ class IMAPFetcher:
         results = []
         zetta_zips = []             # [(filepath, message_info), ...]
         zetta_passwords = []        # passwords found in Zetta emails (monthly first, then per-email)
+        failed_zips = []            # filenames of zips where all passwords failed
         zetta_zip_message_ids = set()  # message_ids for zip emails — marked processed only after extraction
 
         # Pre-scan: search for Zetta monthly password (go back 35 days to catch 1st-of-month email)
@@ -448,6 +450,7 @@ class IMAPFetcher:
                         })
                 else:
                     logger.warning(f"Failed to extract zip {info['filename']} — will retry next run")
+                    failed_zips.append(info['filename'])
                 # Clean up zip
                 try:
                     os.remove(zip_path)
@@ -455,6 +458,8 @@ class IMAPFetcher:
                     pass
         elif zetta_zips and not zetta_passwords:
             logger.warning(f"Found {len(zetta_zips)} Zetta zips but no passwords!")
+            failed_zips.extend(info['filename'] for _, info in zetta_zips)
 
+        self.failed_zips = failed_zips
         logger.info(f"Downloaded {len(results)} new attachments")
         return results
