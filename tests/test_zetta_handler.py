@@ -72,6 +72,40 @@ class TestExtractMonthlyPassword:
         assert extract_monthly_password('') is None
         assert extract_monthly_password(None) is None
 
+    def test_special_chars_in_password(self):
+        """Regression test for v1.9.9 — passwords with %?{} were rejected."""
+        body = """Уважаемые партнеры!
+        Направляем пароль, действующий по электронным спискам
+        в период с 01.03.2026 по 31.03.2026 .
+
+        3RpNk%?}*t
+
+        Коммерческая тайна.
+        Настоящее сообщение конфиденциально."""
+        result = extract_monthly_password(body)
+        assert result is not None
+        assert result['password'] == '3RpNk%?}*t'
+        assert result['valid_from'] == '01.03.2026'
+
+    def test_html_bold_password_with_special_chars(self):
+        """Regression: actual Zetta email format with bold tag and special chars."""
+        body = (
+            '<html><body>'
+            'Уважаемые партнеры!<br>'
+            'Направляем пароль, действующий по электронным спискам, '
+            'полученным от ООО &amp;quot;Зетта Страхование жизни&amp;quot; '
+            'в период с 01.03.2026 по 31.03.2026 .<br>'
+            '<br>'
+            '<b>3RpNk%?}*t</b><br>'
+            '<br>'
+            '<font size="2">Коммерческая тайна.<br>'
+            'Настоящее сообщение конфиденциально.</font>'
+            '</body></html>'
+        )
+        result = extract_monthly_password(body)
+        assert result is not None
+        assert result['password'] == '3RpNk%?}*t'
+
 
 class TestExtractPasswordFromBody:
     def test_zip_pattern(self):
