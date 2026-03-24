@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.9.9"
+__version__ = "1.9.10"
 
 import os
 import re
@@ -409,6 +409,7 @@ def _export_to_network(config: dict, stats: dict) -> None:
         logger.info(f"Exported daily delta ({len(records)} records) to {daily_dest}")
     except Exception as e:
         logger.error(f"Failed to export daily CSV to network: {e}")
+        stats['errors'].append(f"Network daily CSV failed: {e}")
 
     # 2. Monthly master — append to current month file, new file each month
     month_str = now.strftime('%Y-%m')
@@ -426,6 +427,7 @@ def _export_to_network(config: dict, stats: dict) -> None:
         logger.info(f"Appended {len(records)} records to monthly master {monthly_dest}")
     except Exception as e:
         logger.error(f"Failed to export monthly CSV to network: {e}")
+        stats['errors'].append(f"Network monthly CSV failed: {e}")
 
 
 def _ping_healthcheck(config: dict, stats: dict) -> None:

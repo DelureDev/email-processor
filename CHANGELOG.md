@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.9.10] - 2026-03-24
+### Fixed
+- **Network CSV export errors now in email report**: daily and monthly CSV write failures were only logged, not appended to `stats['errors']` — so the email report (moved before export in v1.9.8) still didn't show them. Now both are reported.
+
 ## [1.9.9] - 2026-03-24
 ### Fixed
 - **Zetta monthly password regex too restrictive**: password `3RpNk%?}*t` was rejected because `%`, `?`, `{`, `}` weren't in the allowed charset. Replaced with `[\x21-\x7e]+` (any printable ASCII, no Cyrillic) — future-proof against password character changes.
