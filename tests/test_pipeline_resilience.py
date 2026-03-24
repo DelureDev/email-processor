@@ -86,3 +86,34 @@ class TestWriteBatchFailure:
             assert any('Corrupted xlsx' in e for e in stats['errors'])
             assert stats['new_records'] == []
             assert stats['total_records'] == 0
+
+
+class TestMonthlyAttachmentFailure:
+    def test_monthly_error_in_stats(self):
+        """_attach_monthly_if_last_day should add error to stats, not just log."""
+        import calendar
+        from datetime import datetime
+        from unittest.mock import patch
+        from main import _attach_monthly_if_last_day, make_stats
+
+        stats = make_stats()
+
+        # Create a corrupt "xlsx" file that will cause pd.read_excel to fail
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as f:
+            f.write(b'not a real xlsx')
+            corrupt_path = f.name
+
+        try:
+            config = {'output': {'master_file': corrupt_path}}
+            today = datetime.now()
+            last_day = calendar.monthrange(today.year, today.month)[1]
+
+            # Force last day of month so the function actually runs
+            with patch('main.datetime') as mock_dt:
+                mock_dt.now.return_value = today.replace(day=last_day)
+                mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+                _attach_monthly_if_last_day(config, stats)
+
+            assert any('monthly' in e.lower() or 'Failed' in e for e in stats['errors'])
+        finally:
+            os.unlink(corrupt_path)

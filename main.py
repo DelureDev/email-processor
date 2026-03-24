@@ -325,6 +325,7 @@ def _attach_monthly_if_last_day(config: dict, stats: dict) -> None:
         logger.info(f"Monthly report: {len(monthly)} records for {today.strftime('%B %Y')}")
     except Exception as e:
         logging.getLogger(__name__).error(f"Failed to build monthly records: {e}")
+        stats['errors'].append(f"Monthly report build failed: {e}")
 
 
 def _export_to_network(config: dict, stats: dict) -> None:
