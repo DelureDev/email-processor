@@ -76,7 +76,7 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
     has_problems = bool(errors) or bool(unknown) or bool(unmatched_clinics) or bool(missing_comments)
 
     msg['From'] = smtp_cfg['from_address']
-    msg['To'] = ', '.join(smtp_cfg['recipients'])
+    msg['To'] = ', '.join(r for r in smtp_cfg.get('recipients', []) if r and str(r).strip())
 
     # Subject includes status emoji
     status_emoji = "⚠" if has_problems else "✅"

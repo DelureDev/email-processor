@@ -1,4 +1,5 @@
 """Tests for notifier.py"""
+from notifier import send_report
 
 
 def test_send_report_filters_empty_recipients(tmp_path):
@@ -23,8 +24,8 @@ def test_send_report_filters_empty_recipients(tmp_path):
         'new_records': [], 'master_path': str(tmp_path / 'master.xlsx'),
     }
     with patch('notifier._send') as mock_send:
-        from notifier import send_report
         send_report(config, stats)
+        mock_send.assert_called_once()
         call_args = mock_send.call_args
         recipients_used = call_args[0][1]
         assert '' not in recipients_used
