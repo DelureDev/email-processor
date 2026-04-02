@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.9.14] - 2026-04-02
+### Fixed
+- **Detachment detection too broad — attachment files got empty clinic** — tightened keyword from `'открепл'` to `'открепляем'` (matches PSB "ОТКРЕПЛЯЕМЫХ С МЕДИЦИНСКОГО ОБСЛУЖИВАНИЯ" titles) plus `'снятия с медицинского'` (matches Alfa snyat titles). Column headers like "Дата открепления" in attachment files no longer trigger.
+- **Гарибальди 15 not matched for PSB "Детская стоматология № 2"** — added space variant `'Детская стоматология № 2'` to clinics.yaml (PSB uses a space before the digit, existing keyword had no space).
+
 ## [1.9.13] - 2026-04-02
 ### Fixed
 - **Detachment files no longer warn about missing clinic** — `detect_clinic()` now detects "открепл" keyword (открепление/открепляемых) in file content and returns empty clinic `''` with no warning. Applies to all insurers. Clinic column will be empty in master for these files, which is correct — they are removals only.
