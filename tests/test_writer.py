@@ -125,3 +125,7 @@ class TestSafe:
     def test_minus_single_char(self):
         # Single "-" with no digit after — should be prefixed
         assert _safe('-') == "'-"
+
+def test_safe_prefixes_newline():
+    from writer import _safe
+    assert _safe('\nINJECT') == "'\nINJECT"
