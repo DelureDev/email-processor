@@ -1,6 +1,6 @@
 # Project Status
 
-Current version: **v1.9.5** | Tests: **104** (88 pass, 16 fixture-dependent skip) | Production-ready
+Current version: **v1.10.0** | Tests: **120** (104 pass, 16 fixture-dependent skip) | Production-ready
 
 ---
 
@@ -26,8 +26,13 @@ Current version: **v1.9.5** | Tests: **104** (88 pass, 16 fixture-dependent skip
 | v1.9.3 | 2026-03-20 | Dead network mount timeout, email-before-export order, self-ingestion guard, xlsx column migration |
 | v1.9.4 | 2026-03-20 | Alfa открепление dates, VSK clinic from email subject |
 | v1.9.5 | 2026-03-20 | Code review v7: dedup dtype=str, CSV inside lock, load_existing_keys raises on error, write-before-move |
+| v1.9.6–1.9.7 | 2026-03-20 | Clinic ID sync, dtype=str across parsers, Клиника dedup normalization |
+| v1.9.8–1.9.11 | 2026-03-24 | Network export error visibility, Zetta password fixes, pipeline resilience (write failure recovery) |
+| v1.9.12–1.9.14 | 2026-04-02 | Alfa attachment comment extraction, detachment files → empty clinic, Гарибальди 15 keyword fix |
+| v1.9.15 | 2026-04-02 | SMTP To: header blank recipient fix, test robustness |
+| v1.10.0 | 2026-04-02 | Post-audit hardening: log rotation, LibreOffice check, healthcheck in report, formula injection \n, date formats, 9 new tests |
 
-**Total: 7 review rounds, 100+ issues found and fixed.**
+**Total: 7 review rounds, 120+ issues found and fixed.**
 
 ---
 
@@ -48,7 +53,7 @@ None of these are blockers. All are code quality / maintainability improvements 
 
 ### 2. Test coverage for fetcher / notifier / main (~1380 untested lines)
 
-**Why:** `fetcher.py` (426 lines) and `notifier.py` (299 lines) have zero test coverage. `main.py` only tests `_record_key()`. These are the highest-risk modules — IMAP/SMTP interactions, file I/O, email construction.
+**Why:** `fetcher.py` (426 lines) has zero test coverage. `notifier.py` now has basic recipient-filtering tests. `main.py` has convert_xls_to_xlsx and logging tests. These are the highest-risk modules — IMAP/SMTP interactions, file I/O, email construction.
 
 **How:** Mock `imaplib` and `smtplib` for unit tests. Test pure functions first (`should_skip_file()`, `_build_message()`, `_export_to_network()`). Add 1–2 integration tests for `process_file()` with synthetic xlsx fixtures.
 

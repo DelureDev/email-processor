@@ -67,6 +67,12 @@ crontab -e
 healthcheck_url: "https://hc-ping.com/your-uuid-here"
 ```
 
+Для защиты от зависания монтирования сетевой папки добавьте watchdog в cron:
+```bash
+# Проверять монтирование каждые 15 минут и перемонтировать при необходимости
+*/15 * * * * ls /mnt/storage > /dev/null 2>&1 || mount -a
+```
+
 ## Единая схема данных
 
 | Колонка | Описание |
@@ -138,7 +144,7 @@ sudo mkdir -p /mnt/storage
 sudo mount -t cifs //SERVER/SHARE /mnt/storage -o username=USER,password=PASS,domain=DOMAIN,iocharset=utf8
 
 # Добавить в /etc/fstab для автомонтирования
-//SERVER/SHARE /mnt/storage cifs credentials=/etc/cifs-credentials,iocharset=utf8,uid=1000,_netdev 0 0
+//SERVER/SHARE /mnt/storage cifs credentials=/etc/cifs-credentials,iocharset=utf8,uid=1000,_netdev,vers=3.0 0 0
 ```
 
 В `config.yaml`:

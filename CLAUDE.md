@@ -28,7 +28,7 @@ python main.py --config path/to/config.yaml
 ```
 
 ```bash
-# Run test suite (88 pass, 16 skip without test_files/ fixtures)
+# Run test suite (104 pass, 16 skip without test_files/ fixtures)
 pytest tests/ -v
 
 # Run a single test file
@@ -57,7 +57,7 @@ Production VM: deploy via `git push` then `git pull` on VM.
 
 4. **`parsers/`** — one `.py` file per insurer, each exports a `parse(filepath) -> list[dict]` function. Registered in `parsers/__init__.py` as the `PARSERS` dict mapping format name → function. All parsers return records with the canonical 7-field schema: `ФИО`, `Дата рождения`, `№ полиса`, `Начало обслуживания`, `Конец обслуживания`, `Страховая компания`, `Страхователь`. (`Клиника`, `Комментарий в полис`, `Источник файла`, `Дата обработки` are added by `main.py`/`writer.py`.)
 
-5. **`clinic_matcher.py`** — runs once per file after parsing. `detect_clinic(filepath, subject=None)` returns `(clinic_name, extract_comment, clinic_id)`. Scans both the xlsx content (first 50 rows, lowercased) and the email subject against `clinics.yaml` keywords (longest-first to prevent partial matches). Subject scanning is essential for VSK where clinic name is in the email subject, not the file. No match → `"⚠️ Не определено"`. If `extract_comment=True`, `extract_policy_comment(filepath)` is also called — two strategies: (1) scan rows 0-19 for known column headers (`_COMMENT_COLUMNS`), take first non-empty data cell below; (2) scan all rows for free-text cells >20 chars containing program description keywords.
+5. **`clinic_matcher.py`** — runs once per file after parsing. `detect_clinic(filepath, subject=None)` returns `(clinic_name, extract_comment, clinic_id)`. Scans both the xlsx content (first 50 rows, lowercased) and the email subject against `clinics.yaml` keywords (longest-first to prevent partial matches). Subject scanning is essential for VSK where clinic name is in the email subject, not the file. No match → `"⚠️ Не определено"`. If `extract_comment=True`, `extract_policy_comment(filepath)` is also called — two strategies: (1) scan rows 0-19 for known column headers (`_COMMENT_COLUMNS`), take first non-empty data cell below; (2) scan all rows for free-text cells >20 chars containing program description keywords. Current `_COMMENT_COLUMNS` include `'группа, № договора'` (Alfa attachment format). Detachment/removal files ("открепляем" or "снятия с медицинского обслуживания" in content) return `('', False, '')` — empty clinic, no warning, no comment extraction.
 
 6. **`clinics.yaml`** — configurable clinic lookup table. Each entry has `name`, `id` (for 1C), `keywords` list, and optional `extract_comment: true` flag. Keywords sorted longest-first automatically at load time. Add new clinics here without touching Python code.
 
@@ -133,12 +133,12 @@ git pull
 
 ## Fix history
 
-See `CHANGELOG.md` for per-version details. Current version: **v1.9.11**.
+See `CHANGELOG.md` for per-version details. Current version: **v1.10.0**.
 
 ## Security hardening
 
 - **Credentials** — `config.yaml` uses `${IMAP_PASSWORD}` / `${SMTP_PASSWORD}` env vars. Never commit plaintext credentials.
-- **Formula injection** — `writer.py` sanitizes cell values starting with `=`, `+`, `-`, `@` to prevent xlsx formula injection.
+- **Formula injection** — `writer.py` sanitizes cell values starting with `=`, `+`, `-`, `@`, `\n`, `\t`, `\r`, `|` to prevent xlsx formula injection.
 - **File locking** — `writer.py` acquires exclusive `fcntl` lock around master.xlsx and master.csv writes (prevents data corruption from overlapping cron runs).
 - **SMTP timeout** — 30s timeout on all SMTP operations in `notifier.py`.
 - **Audit log** — separate `audit` logger writing to `./logs/audit.log`. Events: `ZETTA_MONTHLY_PASSWORD_EXTRACTED`, `PASSWORD_EXTRACTED`, `ZIP_EXTRACT`. Never logs actual password values. Override path via `config.yaml` → `logging.audit_file`.
@@ -147,6 +147,7 @@ See `CHANGELOG.md` for per-version details. Current version: **v1.9.11**.
 
 - **Confidence scoring** — `detector.py` emits `logger.warning` for generic-fallback detections. Watch for "Low-confidence detection" in logs.
 - **CSV backup** — `writer.py` incrementally appends to `master.csv` (UTF-8 BOM) after every write.
+- **Log rotation** — `processor.log` and `audit.log` use `RotatingFileHandler` (10 MB × 5 backups = 50 MB max each). No manual logrotate needed.
 - **Dedup normalization** — dates zero-padded (`1.1.2020` → `01.01.2020`) in dedup keys for consistent matching.
 - **Skipped-file breakdown** — email report shows why files were skipped (by rule / unknown format / empty) and lists any xlsx files that hit a skip rule.
 - **Daily delta email** — attaches `records_YYYY-MM-DD.xlsx` (styled) with only this run's new records. No CSV in email — available on network share instead.
