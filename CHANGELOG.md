@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.10.0] - 2026-04-02
+### Fixed
+- Filter empty/blank recipients before SMTP send — `send_report()` and `_build_message()` both now strip falsy/whitespace-only entries from the recipients list
+- Log rotation: `RotatingFileHandler` caps `processor.log` and `audit.log` at 50 MB total (10 MB × 5 backups)
+- LibreOffice return code and output file size now checked in `convert_xls_to_xlsx` — exits with `None` on non-zero exit or zero-byte output
+- Healthcheck ping failure now surfaces in email report `stats['errors']`
+- Newline character added to formula injection guard in `_safe()`
+- `format_date` now recognizes `DD-MM-YYYY` and `YYYY.MM.DD` date formats
+- Generic parser labels unknown company as `'Неизвестна (generic)'` for traceability in email report
+### Tests
+- Detachment detection regression tests: PSB откр → empty clinic, PSB прикр → Гарибальди 15, Alfa snyat → empty clinic
+- `test_safe_prefixes_newline`, `test_format_date_dash_separated`, `test_format_date_dot_year_first`, `test_generic_parser_unknown_sc_label`, `test_log_rotation_uses_rotating_handler`
+### Notes
+- `config.yaml` is gitignored — add `processed_folder: "Обработанные"` under `imap:` on the VM manually
+
 ## [1.9.15] - 2026-04-02
 ### Fixed
 - **To: header included blank recipients** — `_build_message()` now applies the same empty/blank filter to `msg['To']` as `send_report()` uses for the SMTP envelope. Previously the `To:` header could contain empty strings from config.
