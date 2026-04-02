@@ -93,3 +93,19 @@ class TestZetta:
         from parsers.zetta import parse
         records = parse(fixture_path('zetta.xlsx'))
         assert records[0]['№ полиса'] is not None
+
+
+def test_generic_parser_unknown_sc_label(tmp_path):
+    """Generic parser must use 'Неизвестна (generic)' not 'Неизвестная СК'."""
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(['ФИО', 'Дата рождения', '№ полиса', 'Начало', 'Конец'])
+    ws.append(['Иванов Иван Иванович', '01.01.1980', 'П-001', '01.01.2026', '31.12.2026'])
+    path = tmp_path / 'generic_test.xlsx'
+    wb.save(path)
+    from parsers.generic_parser import parse
+    records = parse(str(path))
+    if records:
+        assert records[0].get('Страховая компания') != 'Неизвестная СК'
+        assert 'generic' in records[0].get('Страховая компания', '').lower()

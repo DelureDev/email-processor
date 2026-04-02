@@ -122,7 +122,7 @@ def parse(filepath: str) -> list[dict]:
                 '№ полиса': get_cell_str(df, i, col_polis),
                 'Начало обслуживания': row_start,
                 'Конец обслуживания': row_end,
-                'Страховая компания': row_company or 'Неизвестная СК',
+                'Страховая компания': row_company or 'Неизвестна (generic)',
                 'Страхователь': row_work,
             }
             results.append(record)
