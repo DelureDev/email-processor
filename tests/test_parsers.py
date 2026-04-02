@@ -106,6 +106,6 @@ def test_generic_parser_unknown_sc_label(tmp_path):
     wb.save(path)
     from parsers.generic_parser import parse
     records = parse(str(path))
-    if records:
-        assert records[0].get('Страховая компания') != 'Неизвестная СК'
-        assert 'generic' in records[0].get('Страховая компания', '').lower()
+    assert records, "generic parser returned no records from minimal xlsx"
+    assert records[0].get('Страховая компания') != 'Неизвестная СК'
+    assert 'generic' in records[0].get('Страховая компания', '').lower()
