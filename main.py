@@ -137,14 +137,18 @@ def convert_xls_to_xlsx(filepath: str) -> str | None:
             ['libreoffice', '--headless', '--convert-to', 'xlsx', filepath, '--outdir', outdir],
             capture_output=True, timeout=60
         )
+        if result.returncode != 0:
+            logger.error(f"LibreOffice exited {result.returncode} for {os.path.basename(filepath)}: "
+                         f"{result.stderr.decode(errors='replace')[:200]}")
+            return None
         xlsx_path = os.path.splitext(filepath)[0] + '.xlsx'
-        if os.path.exists(xlsx_path):
+        if os.path.exists(xlsx_path) and os.path.getsize(xlsx_path) > 0:
             logger.info(f"Converted {os.path.basename(filepath)} → .xlsx")
             return xlsx_path
+        logger.error(f"LibreOffice produced no output for {os.path.basename(filepath)}")
     except Exception as e:
         logger.error(f"Failed to convert {filepath}: {e}")
 
-    # Fallback: could not convert
     return None
 
 
