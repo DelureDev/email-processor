@@ -135,3 +135,51 @@ class TestExtractPolicyComment:
     def test_handles_missing_file(self, tmp_path):
         comment = extract_policy_comment(str(tmp_path / 'nonexistent.xlsx'))
         assert comment == ''
+
+import os as _os
+
+_TEST_FILES = _os.path.join(_os.path.dirname(__file__), '..', 'test_files')
+
+@pytest.mark.skipif(
+    not _os.path.exists(_os.path.join(_TEST_FILES, 'ПСБ_Список_на_откр_от_31_03_2026_(0000244141).xlsx')),
+    reason="PSB откр fixture not in test_files/"
+)
+def test_psb_otkr_returns_empty_clinic():
+    """PSB открепление file → empty clinic, no warning."""
+    from clinic_matcher import detect_clinic, reload_clinics
+    reload_clinics()
+    clinic, extract, cid = detect_clinic(
+        _os.path.join(_TEST_FILES, 'ПСБ_Список_на_откр_от_31_03_2026_(0000244141).xlsx')
+    )
+    assert clinic == ''
+    assert extract is False
+
+
+@pytest.mark.skipif(
+    not _os.path.exists(_os.path.join(_TEST_FILES, 'ПСБ_Список_на_прикр_от_27_03_2026_(0000235400).xlsx')),
+    reason="PSB прикр fixture not in test_files/"
+)
+def test_psb_prikr_returns_garibaldi_15():
+    """PSB прикрепление file → Гарибальди 15."""
+    from clinic_matcher import detect_clinic, reload_clinics
+    reload_clinics()
+    clinic, extract, cid = detect_clinic(
+        _os.path.join(_TEST_FILES, 'ПСБ_Список_на_прикр_от_27_03_2026_(0000235400).xlsx')
+    )
+    assert clinic == 'Гарибальди 15'
+    assert cid == '000000001'
+
+
+@pytest.mark.skipif(
+    not _os.path.exists(_os.path.join(_TEST_FILES, '1826_00345267_24-03-2026-20-19-38_1826фдг_snyat.xlsx')),
+    reason="Alfa snyat fixture not in test_files/"
+)
+def test_alfa_snyat_returns_empty_clinic():
+    """Alfa snyat file → empty clinic."""
+    from clinic_matcher import detect_clinic, reload_clinics
+    reload_clinics()
+    clinic, extract, cid = detect_clinic(
+        _os.path.join(_TEST_FILES, '1826_00345267_24-03-2026-20-19-38_1826фдг_snyat.xlsx')
+    )
+    assert clinic == ''
+    assert extract is False
