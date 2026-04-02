@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.9.12] - 2026-04-02
+### Fixed
+- **Комментарий в полис not extracted for Alfa "Гарибальди 36" files** — added `'группа, № договора'` to `_COMMENT_COLUMNS` to match the column header used in Alfa's snyat/prikr file format.
+
 ## [1.9.11] - 2026-03-24
 ### Fixed
 - **Critical: pipeline survives write failure** — `write_batch_to_master` wrapped in try/except in both IMAP and local modes. On failure: error in email report, healthcheck pings /fail, emails stay in INBOX for re-fetch, stats cleared to avoid phantom record counts.
