@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.9.15] - 2026-04-02
+### Fixed
+- **To: header included blank recipients** — `_build_message()` now applies the same empty/blank filter to `msg['To']` as `send_report()` uses for the SMTP envelope. Previously the `To:` header could contain empty strings from config.
+- **Test robustness** — `test_notifier.py`: `from notifier import send_report` moved to module level; `mock_send.assert_called_once()` added before `call_args` access for a clear failure message if `_send` is never invoked.
+
 ## [1.9.14] - 2026-04-02
 ### Fixed
 - **Detachment detection too broad — attachment files got empty clinic** — tightened keyword from `'открепл'` to `'открепляем'` (matches PSB "ОТКРЕПЛЯЕМЫХ С МЕДИЦИНСКОГО ОБСЛУЖИВАНИЯ" titles) plus `'снятия с медицинского'` (matches Alfa snyat titles). Column headers like "Дата открепления" in attachment files no longer trigger.
