@@ -462,7 +462,10 @@ def _ping_healthcheck(config: dict, stats: dict) -> None:
         )
         logger.debug(f"Healthcheck pinged: {url}")
     except Exception as e:
-        logger.warning(f"Healthcheck ping failed: {e}")
+        msg = f"Healthcheck ping failed: {e}"
+        logger.warning(msg)
+        if stats is not None:
+            stats['errors'].append(msg)
 
 
 def run_imap_mode(config: dict, dry_run: bool = False):
