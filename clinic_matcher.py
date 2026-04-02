@@ -96,6 +96,11 @@ def detect_clinic(filepath: str, config_path: str = 'clinics.yaml', subject: str
     if not text:
         return '⚠️ Не определено', False, ''
 
+    # Detachment/removal files ("открепление") — clinic is irrelevant, no warning needed
+    if 'открепл' in text:
+        logger.debug(f"Detachment file detected — skipping clinic match for {os.path.basename(filepath)}")
+        return '', False, ''
+
     for entry in clinics:
         if entry['keyword'] in text:
             logger.debug(f"Clinic matched: '{entry['name']}' via keyword '{entry['keyword']}' in {os.path.basename(filepath)}")

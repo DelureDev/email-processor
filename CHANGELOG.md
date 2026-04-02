@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.9.13] - 2026-04-02
+### Fixed
+- **Detachment files no longer warn about missing clinic** — `detect_clinic()` now detects "открепл" keyword (открепление/открепляемых) in file content and returns empty clinic `''` with no warning. Applies to all insurers. Clinic column will be empty in master for these files, which is correct — they are removals only.
+
 ## [1.9.12] - 2026-04-02
 ### Fixed
 - **Комментарий в полис not extracted for Alfa "Гарибальди 36" files** — added `'группа, № договора'` to `_COMMENT_COLUMNS` to match the column header used in Alfa's snyat/prikr file format.
