@@ -100,3 +100,12 @@ class TestAssembleFio:
     def test_familia_only(self):
         df = pd.DataFrame([['Иванов', float('nan'), float('nan')]])
         assert assemble_fio(df, 0, 0) == 'Иванов'
+
+
+def test_format_date_dash_separated():
+    from parsers.utils import format_date
+    assert format_date('01-03-2026') == '01.03.2026'
+
+def test_format_date_dot_year_first():
+    from parsers.utils import format_date
+    assert format_date('2026.03.01') == '01.03.2026'

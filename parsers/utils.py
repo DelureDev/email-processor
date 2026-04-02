@@ -17,7 +17,8 @@ def format_date(val) -> str | None:
     s = str(val).strip()
     if not s:
         return None
-    for fmt in ['%Y-%m-%d %H:%M:%S', '%d.%m.%Y %H:%M:%S', '%d/%m/%Y %H:%M:%S', '%Y-%m-%d', '%d.%m.%Y', '%d/%m/%Y']:
+    for fmt in ['%Y-%m-%d %H:%M:%S', '%d.%m.%Y %H:%M:%S', '%d/%m/%Y %H:%M:%S',
+                '%Y-%m-%d', '%d.%m.%Y', '%d/%m/%Y', '%d-%m-%Y', '%Y.%m.%d']:
         try:
             return datetime.strptime(s, fmt).strftime('%d.%m.%Y')
         except ValueError:
