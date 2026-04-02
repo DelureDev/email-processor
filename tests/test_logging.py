@@ -24,3 +24,7 @@ def test_log_rotation_uses_rotating_handler(tmp_path, monkeypatch):
     assert RotatingFileHandler in handler_types, (
         f"Expected RotatingFileHandler in handlers, got: {handler_types}"
     )
+    audit_handler_types = [type(h) for h in logging.getLogger('audit').handlers]
+    assert RotatingFileHandler in audit_handler_types, (
+        f"Expected RotatingFileHandler in audit handlers, got: {audit_handler_types}"
+    )
