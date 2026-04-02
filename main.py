@@ -18,6 +18,7 @@ import shutil
 import yaml
 import glob
 import logging
+from logging.handlers import RotatingFileHandler
 import argparse
 import subprocess
 import urllib.request
@@ -41,7 +42,8 @@ def setup_logging(config: dict) -> None:
         level=getattr(logging, log_level),
         format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
         handlers=[
-            logging.FileHandler(log_file, encoding='utf-8'),
+            RotatingFileHandler(log_file, encoding='utf-8',
+                                maxBytes=10 * 1024 * 1024, backupCount=5),
             logging.StreamHandler(sys.stdout),
         ]
     )
@@ -53,7 +55,8 @@ def setup_logging(config: dict) -> None:
     audit_logger.setLevel(logging.INFO)
     audit_logger.propagate = False
     if not audit_logger.handlers:
-        handler = logging.FileHandler(audit_log_file, encoding='utf-8')
+        handler = RotatingFileHandler(audit_log_file, encoding='utf-8',
+                                      maxBytes=10 * 1024 * 1024, backupCount=5)
         handler.setFormatter(logging.Formatter('%(asctime)s %(message)s'))
         audit_logger.addHandler(handler)
 
