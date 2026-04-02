@@ -49,7 +49,7 @@ def send_report(config: dict, stats: dict):
             logger.info("No new records, skipping email report")
             return
 
-    recipients = smtp_cfg.get('recipients', [])
+    recipients = [r for r in smtp_cfg.get('recipients', []) if r and str(r).strip()]
     if not recipients:
         logger.warning("No recipients configured for email report")
         return
