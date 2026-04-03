@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.10.0"
+__version__ = "1.10.1"
 
 import os
 import re
@@ -226,6 +226,16 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
         stats['files_skipped'] += 1
         stats['empty_files'].append(filename)
         return 0
+
+    # Warn if any records have both start and end dates empty — likely a parser miss
+    empty_date_count = sum(
+        1 for r in records
+        if not (r.get('Начало обслуживания') or '').strip()
+        and not (r.get('Конец обслуживания') or '').strip()
+    )
+    if empty_date_count:
+        logger.warning(f"Empty dates: {empty_date_count} record(s) in {filename} have no start or end date")
+        stats['errors'].append(f"Пустые даты ({empty_date_count} записей): {filename}")
 
     # Detect clinic (once per file) and inject into all records BEFORE dedup,
     # because Клиника is part of the dedup key.

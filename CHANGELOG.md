@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.10.1] - 2026-04-03
+### Fixed
+- Zetta detachment letter format (`снять с медицинского обслуживания`) now recognized as detachment — no clinic assigned, no warning
+- Zetta parser extracts `Дата открепления` as `Конец обслуживания` in detachment files (previously both dates were empty)
+- Records with both start and end dates empty now emit a warning and surface in the email report errors section
+
 ## [1.10.0] - 2026-04-02
 ### Fixed
 - Filter empty/blank recipients before SMTP send — `send_report()` and `_build_message()` both now strip falsy/whitespace-only entries from the recipients list

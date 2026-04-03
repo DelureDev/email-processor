@@ -99,8 +99,9 @@ def detect_clinic(filepath: str, config_path: str = 'clinics.yaml', subject: str
     # Detachment/removal files — clinic is irrelevant, no warning needed.
     # "открепляем" matches "ОТКРЕПЛЯЕМЫХ С МЕДИЦИНСКОГО ОБСЛУЖИВАНИЯ" (PSB-style title).
     # "снятия с медицинского" matches Alfa snyat title rows.
+    # "снять с медицинского" matches Zetta detachment letter format.
     # Does NOT trigger on "Дата открепления" column headers in attachment files.
-    if 'открепляем' in text or 'снятия с медицинского' in text:
+    if 'открепляем' in text or 'снятия с медицинского' in text or 'снять с медицинского' in text:
         logger.debug(f"Detachment file detected — skipping clinic match for {os.path.basename(filepath)}")
         return '', False, ''
 

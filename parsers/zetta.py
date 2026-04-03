@@ -51,6 +51,18 @@ def parse(filepath: str) -> list[dict]:
                             srok_end = dates[1]
                         break
 
+            # Дата открепления — detachment letter format (no Срок действия row)
+            if 'дата открепления' in val_str.lower() and ':' in val_str:
+                dates = re.findall(r'\d{2}\.\d{2}\.\d{4}', val_str)
+                if not dates:
+                    for k in range(j + 1, len(df.columns)):
+                        next_val = df.iloc[i, k]
+                        if pd.notna(next_val):
+                            dates = re.findall(r'\d{2}\.\d{2}\.\d{4}', str(next_val))
+                            break
+                if dates:
+                    srok_end = dates[0]
+
     # Find header row
     header_row = find_header_row(df, ('фио', 'полис'), max_rows=25)
     if header_row is None:
