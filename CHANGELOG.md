@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.10.2] - 2026-04-03
+### Fixed
+- Empty-date error message now includes FIO names of affected records (not just filename + count)
+
 ## [1.10.1] - 2026-04-03
 ### Fixed
 - Zetta detachment letter format (`снять с медицинского обслуживания`) now recognized as detachment — no clinic assigned, no warning
