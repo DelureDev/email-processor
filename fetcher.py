@@ -2,7 +2,9 @@
 IMAP Fetcher — connects to Yandex, downloads .xlsx attachments
 """
 import imaplib
+import base64
 import email
+import email.message
 import email.utils
 import ssl
 import sqlite3
@@ -39,7 +41,6 @@ def imap_utf7_encode(name: str) -> str:
     defaults to ASCII encoding and raises UnicodeEncodeError otherwise.
     Modified UTF-7 uses ',' instead of '/' in its base64 alphabet.
     """
-    import base64
     result = []
     buf = []
     for c in name:

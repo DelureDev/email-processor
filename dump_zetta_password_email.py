@@ -1,4 +1,5 @@
 """Print body of Zetta monthly password emails and test the extraction regex."""
+import base64
 import imaplib
 import ssl
 import os
@@ -8,6 +9,31 @@ import time
 import yaml
 from datetime import datetime, timedelta
 
+
+def imap_utf7_encode(name: str) -> str:
+    result = []
+    buf = []
+    for c in name:
+        if 0x20 <= ord(c) <= 0x7e and c != '&':
+            if buf:
+                b64 = base64.b64encode(''.join(buf).encode('utf-16-be')).decode('ascii').rstrip('=').replace('/', ',')
+                result.append('&' + b64 + '-')
+                buf = []
+            result.append(c)
+        elif c == '&':
+            if buf:
+                b64 = base64.b64encode(''.join(buf).encode('utf-16-be')).decode('ascii').rstrip('=').replace('/', ',')
+                result.append('&' + b64 + '-')
+                buf = []
+            result.append('&-')
+        else:
+            buf.append(c)
+    if buf:
+        b64 = base64.b64encode(''.join(buf).encode('utf-16-be')).decode('ascii').rstrip('=').replace('/', ',')
+        result.append('&' + b64 + '-')
+    return ''.join(result)
+
+
 cfg = yaml.safe_load(open('config.yaml'))
 imap_cfg = cfg['imap']
 pwd = os.environ.get('IMAP_PASSWORD', imap_cfg.get('password', ''))
@@ -16,7 +42,6 @@ ctx = ssl.create_default_context()
 m = imaplib.IMAP4_SSL(imap_cfg['server'], imap_cfg.get('port', 993), ssl_context=ctx)
 m.login(imap_cfg['username'], pwd)
 
-from fetcher import imap_utf7_encode
 from zetta_handler import extract_monthly_password
 
 folders_to_check = ['INBOX']
@@ -29,13 +54,11 @@ since_date = (datetime.now() - timedelta(days=35)).strftime('%d-%b-%Y')
 found_any = False
 for folder in folders_to_check:
     print(f"\n=== Searching in: {folder} ===")
-    encoded = imap_utf7_encode(folder)
-    typ, _ = m.select(encoded)
+    typ, _ = m.select(imap_utf7_encode(folder))
     if typ != 'OK':
         print(f"  Could not select folder: {typ}")
         continue
 
-    # Retry SEARCH up to 3 times — some servers return [UNAVAILABLE] transiently
     uids = []
     for attempt in range(1, 4):
         typ, msgs = m.uid('SEARCH', None, f'SINCE {since_date} FROM "parollpu@zettains.ru"')
