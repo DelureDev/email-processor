@@ -78,6 +78,24 @@ def _search_with_retry(mail, charset, criteria, attempts: int = 3, delay: float 
     return last_status, last_data
 
 
+def _safe_fetch_rfc822(mail, uid_str: str, attempts: int = 3, delay: float = 2.0):
+    """FETCH RFC822 for a UID with retry + expunged-UID guard.
+
+    Returns the raw message bytes, or None if the UID is no longer available
+    (expunged between SEARCH and FETCH, or flags-only response).
+    """
+    for attempt in range(1, attempts + 1):
+        status, data = mail.uid('FETCH', uid_str, '(RFC822)')
+        if status != 'OK':
+            if attempt < attempts:
+                time.sleep(delay)
+            continue
+        if not data or data[0] is None or not isinstance(data[0], tuple) or len(data[0]) < 2:
+            return None
+        return data[0][1]
+    return None
+
+
 def decode_mime_header(header_value: str | None) -> str:
     """Decode MIME encoded header (supports Russian encodings)."""
     if not header_value:
@@ -316,16 +334,11 @@ class IMAPFetcher:
             logger.info(f"Found {len(pwd_msgs[0].split())} Zetta monthly password email(s) in {pwd_folder}")
             for uid in pwd_msgs[0].split():
                 try:
-                    msg_data = None
-                    for attempt in range(1, 4):
-                        st, data = self.mail.uid('FETCH', uid.decode(), '(RFC822)')
-                        if st == 'OK':
-                            msg_data = data
-                            break
-                        time.sleep(2)
-                    if msg_data is None:
+                    raw = _safe_fetch_rfc822(self.mail, uid.decode())
+                    if raw is None:
+                        logger.warning(f"Password email UID {uid.decode()} unavailable (expunged or FETCH failed)")
                         continue
-                    msg = email.message_from_bytes(msg_data[0][1])
+                    msg = email.message_from_bytes(raw)
                     message_id = msg.get('Message-ID', uid.decode())
                     monthly = _extract_monthly_pwd_from_msg(msg)
                     if monthly:
