@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.10.7] - 2026-04-23
+### Fixed
+- Main IMAP SEARCH now retries up to 3× on `[UNAVAILABLE]` and raises on persistent failure (previously a single transient Yandex error produced a silent zero-records day)
+- `_save_processed_ids()` is skipped when `write_batch_to_master` fails — prevents permanent loss of emails whose records didn't reach master.xlsx
+- `load_config` raises `ValueError` on unresolved `${VAR}` in config instead of logging and passing the literal placeholder (prevents IMAP account lockout from repeated failed login with `"${IMAP_PASSWORD}"`)
+- Zetta monthly-password FETCH guards against expunged UIDs (previously crashed at DEBUG level, silently losing the password)
+- Zetta monthly password is only marked processed when `valid_to >= today` (prevents stale passwords from blocking re-reads after month boundary)
+### Refactored
+- Removed duplicate IMAP UTF-7 folder encoder; consolidated `_encode_imap_folder` static method into module-level `imap_utf7_encode` (also fixes a latent bug where the static method failed to escape `&` in folder names)
+
 ## [1.10.6] - 2026-04-23
 ### Fixed
 - Cyrillic IMAP folder names (e.g. `Обработанные`) now encoded with IMAP modified UTF-7 (RFC 3501) before `select()` — previously `imaplib` raised `UnicodeEncodeError` and silently skipped the processed folder during Zetta password scan

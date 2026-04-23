@@ -13,6 +13,7 @@ processed_ids.db
 processed_ids.json
 processed_ids.json.bak
 diagnostic_report.json
+tmp.db*
 
 # Config with credentials — use config.example.yaml as template
 config.yaml
@@ -36,3 +37,5 @@ test_files/
 # Presentations (local only)
 presentation.html
 presentation-leadership.html
+.aidesigner/*
+!.aidesigner/.gitkeep
