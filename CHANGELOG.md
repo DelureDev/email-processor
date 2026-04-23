@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.13] - 2026-04-24
+### Added
+- **Alfa per-row Франшиза comment**: when an Alfa xlsx has a comment-column header (any of `_COMMENT_COLUMNS` — "Вид медицинского обслуживания", "Программа ДМС", etc.), each row's cell in that column is checked for the keyword "Франшиза" (case-insensitive). If found, the full cell text lands in `record['Комментарий в полис']`. Flows through to `master.xlsx`, the daily delta xlsx attached to email, and the daily/monthly CSVs on the network share. Fixes cases where Alfa files with blanked clinic names ("сети клиник ________") previously silently lost this financial info.
+- `tests/test_alfa_franchise.py` — 6 tests (4 parser-level, 2 main.py precedence integration tests).
+
+### Changed
+- `main.py:process_file` now uses `r.get('Комментарий в полис') or comment` when assembling records, so parser-set per-row values win over `clinic_matcher.extract_policy_comment`'s file-level fallback. Today only the Alfa parser sets the field; other insurers retain the previous file-level behavior.
+
 ## [1.10.12] - 2026-04-24
 ### Added
 - **`RUN_SUMMARY` log line**: every pipeline run now ends with a single structured INFO line `[RUN_SUMMARY] status=OK|FAIL|CRASH mode=imap|local|test files=N records=N errors=N unknown=N skip_rule=N clinic_miss=N smtp=OK|FAIL|SKIP network=OK|FAIL|SKIP duration=Ns [exception=ClassName]`. Emitted from a `try/finally` so crashes produce a line too. VM triage becomes `grep RUN_SUMMARY logs/processor.log | tail -10` — missing entries signal a dead cron.
