@@ -66,3 +66,15 @@ class TestDetectBySender:
         for sender_key, expected_fmt in SENDER_FORMAT_MAP.items():
             result = detect_by_sender(sender_key)
             assert result == expected_fmt, f"Failed for sender_key={sender_key!r}"
+
+
+def test_reso_not_matched_on_bare_substring(tmp_path):
+    """A file containing 'ресо' but NOT 'ресо-гарантия' must not be routed to RESO."""
+    import pandas as pd
+    path = tmp_path / "ambiguous.xlsx"
+    pd.DataFrame({
+        'col1': ['Компания: ООО Ресорс-М'],
+        'col2': ['Прочие данные'],
+    }).to_excel(path, index=False)
+    result = detect_format(str(path))
+    assert result != 'reso', f"Expected non-reso, got {result!r}"

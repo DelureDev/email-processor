@@ -54,7 +54,6 @@ def detect_by_sender(sender: str) -> str | None:
 # Order matters — more specific rules first.
 CONTENT_RULES: list[tuple[str, tuple[str, ...]]] = [
     ('reso',        ('ресо-гарантия',)),
-    ('reso',        ('ресо',)),
     ('yugoriya',    ('югория',)),
     ('zetta',       ('зетта', 'страхован')),
     ('alfa',        ('альфастрахован',)),
