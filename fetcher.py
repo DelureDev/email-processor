@@ -102,6 +102,7 @@ class IMAPFetcher:
         self.username = config['imap']['username']
         self.password = config['imap']['password']
         self.folder = config['imap']['folder']
+        self.processed_folder = config['imap'].get('processed_folder', '').strip()
         self.allowed_senders = config['imap'].get('allowed_senders', [])
         self.subject_keywords = config['imap'].get('subject_keywords', [])
         self.temp_folder = config['processing']['temp_folder']
@@ -278,10 +279,9 @@ class IMAPFetcher:
         # Pre-scan: search for Zetta monthly password (go back 35 days to catch 1st-of-month email)
         # Searches both INBOX and processed_folder — email may have been moved by a prior run
         pwd_since = _imap_date(datetime.now() - timedelta(days=35))
-        processed_folder = config.get('imap', {}).get('processed_folder', '').strip()
         pwd_search_folders = [self.folder]
-        if processed_folder and processed_folder != self.folder:
-            pwd_search_folders.append(processed_folder)
+        if self.processed_folder and self.processed_folder != self.folder:
+            pwd_search_folders.append(self.processed_folder)
 
         for pwd_folder in pwd_search_folders:
             try:
