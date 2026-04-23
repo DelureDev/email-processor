@@ -96,6 +96,25 @@ def _safe_fetch_rfc822(mail, uid_str: str, attempts: int = 3, delay: float = 2.0
     return None
 
 
+def _should_mark_monthly_processed(monthly: dict, today=None) -> bool:
+    """True if the monthly-password email is still current (valid_to >= today).
+
+    Fail-safe: returns False for missing, malformed, or None valid_to values,
+    so a stale or unparseable email is re-read next run rather than permanently
+    skipped.
+    """
+    if today is None:
+        today = datetime.now()
+    valid_to = monthly.get('valid_to')
+    if not valid_to:
+        return False
+    try:
+        valid_dt = datetime.strptime(valid_to, '%d.%m.%Y')
+    except (ValueError, TypeError):
+        return False
+    return valid_dt.date() >= today.date()
+
+
 def decode_mime_header(header_value: str | None) -> str:
     """Decode MIME encoded header (supports Russian encodings)."""
     if not header_value:
@@ -345,7 +364,10 @@ class IMAPFetcher:
                         if monthly['password'] not in zetta_passwords:
                             zetta_passwords.insert(0, monthly['password'])
                             logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
-                        self.processed_ids.add(message_id)
+                        if _should_mark_monthly_processed(monthly):
+                            self.processed_ids.add(message_id)
+                        else:
+                            logger.info(f"Monthly password email for {monthly.get('valid_to')} is stale — not marking processed")
                     else:
                         logger.warning(f"Zetta monthly password email found in {pwd_folder} but could not extract password — format may have changed")
                     # If extraction returned None — do NOT mark processed, retry next run

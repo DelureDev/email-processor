@@ -66,3 +66,23 @@ def test_safe_fetch_retries_on_non_ok_status():
     result = _safe_fetch_rfc822(mail, '42', attempts=3, delay=0)
     assert result == b'ok-body'
     assert mail.uid.call_count == 2
+
+
+def test_expired_monthly_password_not_marked_processed():
+    """A monthly password whose valid_to is in the past must not be marked processed."""
+    from datetime import datetime
+    from fetcher import _should_mark_monthly_processed
+
+    today = datetime(2026, 4, 23)
+    # Expired (March 2026)
+    assert not _should_mark_monthly_processed({'valid_to': '31.03.2026'}, today=today)
+    # Current (April 2026)
+    assert _should_mark_monthly_processed({'valid_to': '30.04.2026'}, today=today)
+    # Future
+    assert _should_mark_monthly_processed({'valid_to': '31.05.2026'}, today=today)
+    # Missing valid_to — fail safe: don't mark, retry next run
+    assert not _should_mark_monthly_processed({}, today=today)
+    # Malformed valid_to — fail safe
+    assert not _should_mark_monthly_processed({'valid_to': 'garbage'}, today=today)
+    # None value — fail safe
+    assert not _should_mark_monthly_processed({'valid_to': None}, today=today)
