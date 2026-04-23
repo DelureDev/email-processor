@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.10.3] - 2026-04-23
+### Fixed
+- `_print_summary` replaced `print()` with `logger.info()` — cron ASCII stdout was raising `UnicodeEncodeError` on Cyrillic error messages, silently killing the pipeline before email/export ran
+- Each post-processing step (network export, monthly attach, notifier) now has its own `try/except` so one failure no longer silently prevents the others from running
+
 ## [1.10.2] - 2026-04-03
 ### Fixed
 - Empty-date error message now includes FIO names of affected records (not just filename + count)
