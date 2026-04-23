@@ -41,15 +41,31 @@ def load_existing_keys(master_path: str) -> set:
     keys = set()
     if not os.path.exists(master_path):
         return keys
-    try:
-        dedup_cols = ['ФИО', '№ полиса', 'Начало обслуживания', 'Конец обслуживания', 'Клиника']
-        header_cols = set(pd.read_excel(master_path, nrows=0).columns)
-        available = dedup_cols if all(c in header_cols for c in dedup_cols) else dedup_cols[:-1]
-        df = pd.read_excel(master_path, usecols=available, dtype=str)
-        if 'Клиника' not in df.columns:
-            df['Клиника'] = ''
 
-        for col in available:
+    dedup_cols = ['ФИО', '№ полиса', 'Начало обслуживания', 'Конец обслуживания', 'Клиника']
+
+    # Check schema outside the general try/except so the error message is not double-wrapped.
+    try:
+        header_cols = set(pd.read_excel(master_path, nrows=0).columns)
+    except Exception as e:
+        logger.error(f"Error reading master headers from {master_path}: {e}")
+        raise RuntimeError(f"Cannot read master headers: {e}") from e
+
+    missing = [c for c in dedup_cols if c not in header_cols]
+    if missing:
+        logger.error(f"Dedup columns missing from {master_path}: {missing}")
+        raise RuntimeError(
+            f"Dedup columns missing: {missing}. "
+            f"Master file is on an old schema (pre-v1.9 layout had no Клиника column). "
+            f"Add the missing column(s) (e.g. via openpyxl insert_cols) or restore "
+            f"from backup before re-running — continuing would silently duplicate the "
+            f"entire history on the next write. See logs for the affected path."
+        )
+
+    try:
+        df = pd.read_excel(master_path, usecols=dedup_cols, dtype=str)
+
+        for col in dedup_cols:
             df[col] = df[col].map(lambda v: clean_dedup_val(v))
         df['ФИО'] = df['ФИО'].str.upper().str.replace('Ё', 'Е', regex=False)
         df['Клиника'] = df['Клиника'].str.upper()

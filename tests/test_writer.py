@@ -82,6 +82,23 @@ class TestLoadExistingKeys:
         assert key2 in keys
         assert key3 not in keys
 
+    def test_raises_if_klinika_column_missing(self, tmp_path):
+        """master.xlsx without Клиника column must raise, not silently mis-dedup."""
+        from openpyxl import Workbook
+        path = str(tmp_path / "old_schema.xlsx")
+        wb = Workbook()
+        ws = wb.active
+        # Old (pre-v1.9) schema — no Клиника, no Комментарий в полис
+        ws.append(['ФИО', 'Дата рождения', '№ полиса', 'Начало обслуживания',
+                   'Конец обслуживания', 'Страховая компания', 'Страхователь',
+                   'Источник файла', 'Дата обработки'])
+        ws.append(['ИВАНОВ И И', '01.01.1990', 'POL-1', '01.01.2026',
+                   '31.12.2026', 'ТестСК', 'ООО', 'a.xlsx', '23.04.2026'])
+        wb.save(path)
+
+        with pytest.raises(RuntimeError, match=r'(?i)клиника'):
+            load_existing_keys(path)
+
 
 class TestSafe:
     """Tests for _safe() formula injection prevention."""
