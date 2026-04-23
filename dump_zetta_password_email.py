@@ -1,4 +1,4 @@
-"""Print body of Zetta monthly password emails so we can fix the regex."""
+"""Print body of Zetta monthly password emails and test the extraction regex."""
 import imaplib
 import ssl
 import os
@@ -19,6 +19,8 @@ _, msgs = m.uid('SEARCH', None, 'FROM "parollpu@zettains.ru"')
 uids = msgs[0].split() if msgs[0] else []
 print(f"Found {len(uids)} email(s)\n")
 
+from zetta_handler import extract_monthly_password
+
 for uid in uids[-1:]:  # just the most recent one
     _, data = m.uid('FETCH', uid.decode(), '(RFC822)')
     msg = email.message_from_bytes(data[0][1])
@@ -29,9 +31,15 @@ for uid in uids[-1:]:  # just the most recent one
         ct = part.get_content_type()
         if ct in ('text/plain', 'text/html'):
             charset = part.get_content_charset() or 'utf-8'
-            body = part.get_payload(decode=True).decode(charset, errors='replace')
-            body = re.sub(r'<[^>]+>', ' ', body)  # strip html tags
-            print(f"[{ct}]\n{body[:1000]}")
+            raw_body = part.get_payload(decode=True).decode(charset, errors='replace')
+            stripped = re.sub(r'<[^>]+>', ' ', raw_body)
+            print(f"[{ct}]\n{stripped[:1000]}")
             print("-" * 60)
+            result = extract_monthly_password(raw_body)
+            if result:
+                print(f"[EXTRACTION OK] password={result['password']!r}  valid {result['valid_from']} - {result['valid_to']}")
+            else:
+                print("[EXTRACTION FAILED] extract_monthly_password returned None")
+            print("=" * 60)
 
 m.logout()
