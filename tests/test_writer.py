@@ -126,6 +126,23 @@ class TestSafe:
         # Single "-" with no digit after — should be prefixed
         assert _safe('-') == "'-"
 
+    def test_blocks_dash_digit_formula(self):
+        """Regression: '-1+cmd' previously bypassed the dash carve-out."""
+        assert _safe("-1+cmd|'/C calc'!A1") == "'-1+cmd|'/C calc'!A1"
+
+    def test_blocks_dash_digit_with_at(self):
+        assert _safe("-1@SUM(A1:A10)") == "'-1@SUM(A1:A10)"
+
+    def test_blocks_dash_number_with_letters(self):
+        assert _safe("-500abc") == "'-500abc"
+
+    def test_preserves_negative_integer(self):
+        """Sanity: pure negative integers still pass through unescaped."""
+        assert _safe('-12345') == '-12345'
+
+    def test_preserves_negative_decimal(self):
+        assert _safe('-3.14159') == '-3.14159'
+
 def test_safe_prefixes_newline():
     from writer import _safe
     assert _safe('\nINJECT') == "'\nINJECT"

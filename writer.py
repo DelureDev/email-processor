@@ -2,6 +2,7 @@
 Writer — appends normalized records to master xlsx file on network drive.
 """
 import os
+import re
 import sys
 import shutil
 import pandas as pd
@@ -163,9 +164,12 @@ def _export_csv(master_path: str, new_records: list[dict]) -> None:
         logger.warning(f"CSV backup failed: {e}")
 
 
+_SIGNED_NUMBER_RE = re.compile(r'^-?\d+(\.\d+)?$')
+
 def _safe(value) -> object:
     """Prevent formula injection by prefixing formula-like strings with apostrophe.
-    Does not prefix negative numbers (e.g. -500 stays as-is).
+    Does not prefix pure signed numbers (e.g. -500, -3.14 stay as-is).
+    Any other '-' prefix (including '-1+cmd') is escaped.
     """
     if value is None:
         return ''
@@ -175,7 +179,7 @@ def _safe(value) -> object:
     c = s[0]
     if c in ('=', '+', '@', '\t', '\r', '\n', '|'):
         return "'" + s
-    if c == '-' and (len(s) < 2 or not s[1].isdigit()):
+    if c == '-' and not _SIGNED_NUMBER_RE.fullmatch(s):
         return "'" + s
     return value
 
