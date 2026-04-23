@@ -165,3 +165,85 @@ class TestProcessedIdsNotSavedOnWriteFailure:
 
         fake_fetcher._save_processed_ids.assert_not_called()
         fake_fetcher.move_to_folder.assert_not_called()
+
+
+class TestMonthlyAttachmentHappyPath:
+    """Lock observable behavior: last-day populates monthly_records; non-last-day leaves it empty."""
+
+    def test_last_day_populates_monthly_records(self, tmp_path, monkeypatch):
+        """On the last day of the month, master.xlsx is filtered by 'Дата обработки' month."""
+        import main
+        import pandas as pd
+        from datetime import datetime as real_dt
+
+        master = tmp_path / 'master.xlsx'
+        df = pd.DataFrame([
+            {'ФИО': 'Иванов И.И.', '№ полиса': '1', 'Начало обслуживания': '01.04.2026',
+             'Конец обслуживания': '30.04.2026', 'Страховая компания': 'X',
+             'Страхователь': 'Y', 'Клиника': 'Z', 'Комментарий в полис': '',
+             'Источник файла': 'a.xlsx', 'Дата обработки': '15.04.2026'},
+            {'ФИО': 'Петров П.П.', '№ полиса': '2', 'Начало обслуживания': '01.03.2026',
+             'Конец обслуживания': '31.03.2026', 'Страховая компания': 'X',
+             'Страхователь': 'Y', 'Клиника': 'Z', 'Комментарий в полис': '',
+             'Источник файла': 'b.xlsx', 'Дата обработки': '10.03.2026'},
+            {'ФИО': 'Сидоров С.С.', '№ полиса': '3', 'Начало обслуживания': '01.04.2026',
+             'Конец обслуживания': '30.04.2026', 'Страховая компания': 'X',
+             'Страхователь': 'Y', 'Клиника': 'Z', 'Комментарий в полис': '',
+             'Источник файла': 'c.xlsx', 'Дата обработки': '1.4.2026'},
+        ])
+        df.to_excel(master, index=False)
+
+        config = {'output': {'master_file': str(master)}}
+        stats = main.make_stats()
+
+        # Freeze "today" to April 30, 2026 — last day of April
+        class Frozen(real_dt):
+            @classmethod
+            def now(cls, tz=None):
+                return real_dt(2026, 4, 30)
+        monkeypatch.setattr('main.datetime', Frozen)
+
+        main._attach_monthly_if_last_day(config, stats)
+
+        # Observable behavior: monthly_records populated with only April rows
+        assert isinstance(stats['monthly_records'], list)
+        assert len(stats['monthly_records']) == 2, (
+            f"Expected 2 April records, got {len(stats['monthly_records'])}: {stats['monthly_records']}"
+        )
+        fios = {r['ФИО'] for r in stats['monthly_records']}
+        assert 'Иванов И.И.' in fios
+        assert 'Сидоров С.С.' in fios  # "1.4.2026" should be zero-padded and match
+        assert 'Петров П.П.' not in fios  # March row excluded
+        # No error should have been logged
+        assert not any('monthly' in e.lower() for e in stats['errors'])
+
+    def test_non_last_day_skips(self, tmp_path, monkeypatch):
+        """On a non-last-day, monthly_records stays empty even if master.xlsx exists."""
+        import main
+        import pandas as pd
+        from datetime import datetime as real_dt
+
+        # Even with a real master file, function should skip on non-last-day
+        master = tmp_path / 'master.xlsx'
+        df = pd.DataFrame([
+            {'ФИО': 'A', '№ полиса': '1', 'Начало обслуживания': '01.04.2026',
+             'Конец обслуживания': '30.04.2026', 'Страховая компания': 'X',
+             'Страхователь': 'Y', 'Клиника': 'Z', 'Комментарий в полис': '',
+             'Источник файла': 'a.xlsx', 'Дата обработки': '15.04.2026'},
+        ])
+        df.to_excel(master, index=False)
+
+        class Frozen(real_dt):
+            @classmethod
+            def now(cls, tz=None):
+                return real_dt(2026, 4, 15)  # mid-month, not last day
+        monkeypatch.setattr('main.datetime', Frozen)
+
+        config = {'output': {'master_file': str(master)}}
+        stats = main.make_stats()
+
+        main._attach_monthly_if_last_day(config, stats)
+
+        # Observable behavior: monthly_records unchanged (empty list from make_stats)
+        assert stats['monthly_records'] == []
+        assert not any('monthly' in e.lower() for e in stats['errors'])
