@@ -12,6 +12,7 @@ import time
 from email.header import decode_header
 import os
 import re
+import shutil
 import tempfile
 import logging
 from datetime import datetime, timedelta
@@ -578,6 +579,10 @@ class IMAPFetcher:
                 else:
                     logger.warning(f"Failed to extract zip {info['filename']} — will retry next run")
                     failed_zips.append(info['filename'])
+                    try:
+                        shutil.rmtree(extract_dir, ignore_errors=True)
+                    except OSError:
+                        pass
                 # Clean up zip
                 try:
                     os.remove(zip_path)
