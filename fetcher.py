@@ -340,7 +340,7 @@ class IMAPFetcher:
                 status, data = _search_with_retry(
                     self.mail, None, f'(SINCE {pwd_since} FROM "parollpu@zettains.ru")')
                 if status != 'OK':
-                    logger.debug(f"No Zetta monthly password email found in {pwd_folder} (SEARCH failed after retries)")
+                    logger.warning(f"No Zetta monthly password email found in {pwd_folder} (SEARCH failed after retries)")
                     continue
                 pwd_msgs = data
                 if pwd_msgs is None or not pwd_msgs[0]:
