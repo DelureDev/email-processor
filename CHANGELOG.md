@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.10.8] - 2026-04-23
+### Added
+- Zetta monthly password now cached to `./zetta_password.json` (gitignored, mode 0600) on successful extraction. On subsequent runs the pipeline loads the cache and skips the IMAP pre-scan entirely, making Zetta ZIP extraction immune to Yandex's intermittent `[UNAVAILABLE]` rejections of the `FROM "parollpu@zettains.ru"` filter. Cache expires automatically when `valid_to < today`. Cache save also triggers from the main-search loop's monthly-password branches, not only the pre-scan.
+- New config key `imap.zetta_password_cache` (default: `./zetta_password.json`) to customize cache location.
+
 ## [1.10.7] - 2026-04-23
 ### Fixed
 - Main IMAP SEARCH now retries up to 3× on `[UNAVAILABLE]` and raises on persistent failure (previously a single transient Yandex error produced a silent zero-records day)
