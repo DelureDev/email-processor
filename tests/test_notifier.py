@@ -123,3 +123,64 @@ def test_smtp_status_skip_when_disabled(tmp_path):
     send_report(config, stats)
 
     assert stats['smtp_status'] == 'SKIP'
+
+
+class TestBuildLogTailHtml:
+    def test_returns_none_when_file_missing(self, tmp_path):
+        from notifier import _build_log_tail_html
+        from datetime import datetime
+        result = _build_log_tail_html(str(tmp_path / 'nope.log'), datetime.now())
+        assert result is None
+
+    def test_returns_none_when_no_matching_lines(self, tmp_path):
+        from notifier import _build_log_tail_html
+        from datetime import datetime
+        log = tmp_path / 'p.log'
+        log.write_text(
+            "2026-04-23 10:00:00,000 [INFO] main: old line\n"
+            "2026-04-23 10:00:01,000 [INFO] main: older line\n",
+            encoding='utf-8'
+        )
+        result = _build_log_tail_html(str(log), datetime(2026, 4, 23, 15, 0, 0))
+        assert result is None
+
+    def test_returns_details_block_with_current_run_lines(self, tmp_path):
+        from notifier import _build_log_tail_html
+        from datetime import datetime
+        log = tmp_path / 'p.log'
+        log.write_text(
+            "2026-04-23 10:00:00,000 [INFO] main: old\n"
+            "2026-04-23 15:30:05,000 [INFO] main: this run started\n"
+            "2026-04-23 15:30:10,000 [ERROR] writer: problem\n",
+            encoding='utf-8'
+        )
+        result = _build_log_tail_html(str(log), datetime(2026, 4, 23, 15, 30, 0))
+        assert result is not None
+        assert '<details' in result
+        assert 'this run started' in result
+        assert 'problem' in result
+        assert 'old' not in result
+
+    def test_truncates_at_size_cap(self, tmp_path):
+        from notifier import _build_log_tail_html
+        from datetime import datetime
+        log = tmp_path / 'p.log'
+        lines = [f"2026-04-23 15:30:{i % 60:02d},000 [INFO] main: line{i} " + ("x" * 200)
+                 for i in range(300)]
+        log.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+        result = _build_log_tail_html(str(log), datetime(2026, 4, 23, 15, 29, 0), max_bytes=10_000)
+        assert result is not None
+        assert 'предыдущие строки пропущены' in result
+        assert len(result) < 20_000
+
+    def test_html_escapes_angle_brackets(self, tmp_path):
+        from notifier import _build_log_tail_html
+        from datetime import datetime
+        log = tmp_path / 'p.log'
+        log.write_text(
+            "2026-04-23 15:30:05,000 [ERROR] main: bad <tag> & stuff\n",
+            encoding='utf-8'
+        )
+        result = _build_log_tail_html(str(log), datetime(2026, 4, 23, 15, 30, 0))
+        assert '&lt;tag&gt;' in result
+        assert '<tag>' not in result

@@ -65,6 +65,63 @@ def send_report(config: dict, stats: dict):
         stats['smtp_status'] = 'FAIL'
 
 
+def _build_log_tail_html(log_path: str, run_start: datetime, max_bytes: int = 20_480) -> str | None:
+    """Return an HTML <details> block with log lines from this run, or None.
+
+    Reads the tail of log_path, keeps only lines whose leading timestamp
+    is >= run_start, caps total size at max_bytes (keeping the most recent
+    bytes), HTML-escapes the content, wraps in a collapsible <details>.
+    Returns None if the file can't be read or no matching lines exist.
+    """
+    if not log_path or not os.path.exists(log_path):
+        return None
+    try:
+        with open(log_path, 'rb') as f:
+            f.seek(0, 2)
+            size = f.tell()
+            read_bytes = min(size, max(max_bytes * 4, 40_000))
+            partial = read_bytes < size
+            f.seek(size - read_bytes)
+            raw = f.read().decode('utf-8', errors='replace')
+    except Exception:
+        return None
+
+    lines = raw.split('\n')
+    # Drop the first line only when we seeked into the middle of the file
+    # (it is likely a partial/truncated line).
+    if partial and len(lines) > 1:
+        lines = lines[1:]
+
+    run_start_str = run_start.strftime('%Y-%m-%d %H:%M:%S')
+    filtered = [line for line in lines if len(line) >= 19 and line[:19] >= run_start_str]
+
+    if not filtered:
+        return None
+
+    text = '\n'.join(filtered)
+    truncated = False
+    text_b = text.encode('utf-8')
+    if len(text_b) > max_bytes:
+        truncated = True
+        text_b = text_b[-max_bytes:]
+        text = text_b.decode('utf-8', errors='replace')
+        if '\n' in text:
+            text = text[text.index('\n') + 1:]
+
+    prefix = '[... предыдущие строки пропущены, смотрите processor.log на VM ...]\n' if truncated else ''
+    escaped = html.escape(prefix + text)
+
+    return (
+        '<details style="margin-top: 24px;">'
+        '<summary style="cursor: pointer; color: #666;">'
+        'Последние строки лога (для диагностики)</summary>'
+        '<pre style="font-family: monospace; font-size: 11px; background: #f9f9f9; '
+        'padding: 12px; overflow-x: auto; max-height: 400px;">'
+        + escaped +
+        '</pre></details>'
+    )
+
+
 def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
     """Build email message with report and attachment."""
     msg = MIMEMultipart()
