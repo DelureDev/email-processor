@@ -64,6 +64,20 @@ def imap_utf7_encode(name: str) -> str:
     return ''.join(result)
 
 
+def _search_with_retry(mail, charset, criteria, attempts: int = 3, delay: float = 3.0):
+    """Run UID SEARCH with retry on non-OK responses (e.g. Yandex [UNAVAILABLE])."""
+    last_status, last_data = 'BAD', [b'']
+    for attempt in range(1, attempts + 1):
+        status, data = mail.uid('SEARCH', charset, criteria)
+        if status == 'OK':
+            return status, data
+        last_status, last_data = status, data
+        logger.warning(f"IMAP SEARCH attempt {attempt} failed ({status}), retrying...")
+        if attempt < attempts:
+            time.sleep(delay)
+    return last_status, last_data
+
+
 def decode_mime_header(header_value: str | None) -> str:
     """Decode MIME encoded header (supports Russian encodings)."""
     if not header_value:
@@ -290,13 +304,12 @@ class IMAPFetcher:
                 logger.debug(f"Cannot select folder {pwd_folder} for password scan: {e}")
                 continue
             pwd_msgs = None
-            for _attempt in range(1, 4):
-                status, _data = self.mail.uid('SEARCH', None, f'(SINCE {pwd_since} FROM "parollpu@zettains.ru")')
-                if status == 'OK':
-                    pwd_msgs = _data
-                    break
-                logger.warning(f"Zetta password SEARCH in {pwd_folder} attempt {_attempt} failed ({status}), retrying...")
-                time.sleep(3)
+            status, data = _search_with_retry(
+                self.mail, None, f'(SINCE {pwd_since} FROM "parollpu@zettains.ru")')
+            if status != 'OK':
+                logger.debug(f"No Zetta monthly password email found in {pwd_folder} (SEARCH failed after retries)")
+                continue
+            pwd_msgs = data
             if pwd_msgs is None or not pwd_msgs[0]:
                 logger.debug(f"No Zetta monthly password email found in {pwd_folder}")
                 continue
@@ -336,11 +349,11 @@ class IMAPFetcher:
 
         # Main search for recent emails
         since_date = _imap_date(datetime.now() - timedelta(days=days_back))
-        status, messages = self.mail.uid('SEARCH', None, f'(SINCE {since_date})')
+        status, messages = _search_with_retry(self.mail, None, f'(SINCE {since_date})')
 
         if status != 'OK':
-            logger.error("Failed to search emails")
-            return []
+            logger.error(f"Failed to search emails after retries: {status}")
+            raise RuntimeError(f"IMAP SEARCH failed: {status}")
 
         msg_uids = messages[0].split()
         logger.info(f"Found {len(msg_uids)} emails in last {days_back} days")
