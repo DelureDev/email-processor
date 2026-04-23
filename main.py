@@ -566,12 +566,22 @@ def run_imap_mode(config: dict, dry_run: bool = False):
     _print_summary(stats)
 
     if not dry_run:
-        # Export to network share BEFORE email — timeout (10s) prevents hanging,
-        # and any errors will be included in the email report
-        _export_to_network(config, stats)
-        _attach_monthly_if_last_day(config, stats)
-        from notifier import send_report
-        send_report(config, stats)
+        try:
+            # Export to network share BEFORE email — timeout (10s) prevents hanging,
+            # and any errors will be included in the email report
+            _export_to_network(config, stats)
+        except Exception as e:
+            logger.error(f"Network export failed: {e}", exc_info=True)
+            stats['errors'].append(f"Network export failed: {e}")
+        try:
+            _attach_monthly_if_last_day(config, stats)
+        except Exception as e:
+            logger.error(f"Monthly attachment failed: {e}", exc_info=True)
+        try:
+            from notifier import send_report
+            send_report(config, stats)
+        except Exception as e:
+            logger.error(f"Notifier failed: {e}", exc_info=True)
 
     # Healthcheck ping — always fires so we know if cron stopped running
     _ping_healthcheck(config, stats)
@@ -694,29 +704,30 @@ def run_test_mode(folder: str, config: dict):
 
 
 def _print_summary(stats: dict) -> None:
-    """Print processing summary to console."""
-    print(f"\n{'='*50}")
-    print(f"  Records:    {stats['total_records']}")
-    print(f"  Files OK:   {stats['files_processed']}")
-    print(f"  Skipped:    {stats['files_skipped']}")
-    print(f"  Duplicates: {stats['duplicates_removed']}")
+    """Log processing summary."""
+    _log = logging.getLogger(__name__)
+    _log.info("=" * 50)
+    _log.info(f"  Records:    {stats['total_records']}")
+    _log.info(f"  Files OK:   {stats['files_processed']}")
+    _log.info(f"  Skipped:    {stats['files_skipped']}")
+    _log.info(f"  Duplicates: {stats['duplicates_removed']}")
     if stats['by_company']:
-        print(f"  By company:")
+        _log.info("  By company:")
         for company, count in sorted(stats['by_company'].items(), key=lambda x: -x[1]):
-            print(f"    {company}: {count}")
+            _log.info(f"    {company}: {count}")
     if stats.get('unknown_files'):
-        print(f"  ❓ Unknown format ({len(stats['unknown_files'])}):")
+        _log.info(f"  Unknown format ({len(stats['unknown_files'])}):")
         for f in stats['unknown_files'][:10]:
-            print(f"    {f}")
+            _log.info(f"    {f}")
     if stats.get('empty_files'):
-        print(f"  📭 Empty files ({len(stats['empty_files'])}):")
+        _log.info(f"  Empty files ({len(stats['empty_files'])}):")
         for f in stats['empty_files'][:10]:
-            print(f"    {f}")
+            _log.info(f"    {f}")
     if stats['errors']:
-        print(f"  Errors: {len(stats['errors'])}")
+        _log.info(f"  Errors: {len(stats['errors'])}")
         for e in stats['errors'][:5]:
-            print(f"    ⚠ {e}")
-    print(f"{'='*50}\n")
+            _log.info(f"    ! {e}")
+    _log.info("=" * 50)
 
 
 if __name__ == '__main__':

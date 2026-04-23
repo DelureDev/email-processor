@@ -115,7 +115,7 @@ git push origin main
 git push origin v1.2.3
 ```
 
-4. Deploy to VM:
+4. Deploy to VM — always include this step after pushing, without waiting to be asked:
 ```bash
 # On VM:
 git pull
