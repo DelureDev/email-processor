@@ -99,3 +99,58 @@ def test_alfa_non_franchise_comment_not_extracted(tmp_path):
 
     assert len(records) == 1
     assert not records[0].get('Комментарий в полис')
+
+
+class TestMainCommentPrecedence:
+    """Parser-set Комментарий в полис wins over clinic_matcher fallback."""
+
+    def test_parser_franchise_wins_over_clinic_matcher(self, tmp_path, monkeypatch):
+        """Parser's per-row Франшиза beats clinic_matcher's file-level comment."""
+        import main
+
+        path = tmp_path / "alfa.xlsx"
+        _write_alfa_xlsx(path, [
+            (1, 'POL001', 'ИВАНОВ И И', '01.01.1990', '01.01.2026', '31.12.2026',
+             'Франшиза 55%: per-row value'),
+        ])
+
+        monkeypatch.setattr(main, 'detect_clinic',
+                            lambda *a, **kw: ('Клиника1', True, '123'))
+        monkeypatch.setattr(main, 'extract_policy_comment',
+                            lambda *a, **kw: 'FILE-LEVEL-CLINIC-COMMENT')
+
+        stats = main.make_stats()
+        stats['master_path'] = str(tmp_path / 'master.xlsx')
+        config = {'processing': {'deduplicate': False}}
+
+        main.process_file(str(path), stats['master_path'], config, stats,
+                         existing_keys=set(), dry_run=True, pending=None)
+
+        assert len(stats['new_records']) == 1
+        assert stats['new_records'][0]['Комментарий в полис'] == 'Франшиза 55%: per-row value'
+
+
+    def test_clinic_matcher_fills_when_parser_empty(self, tmp_path, monkeypatch):
+        """When parser sets no Комментарий, clinic_matcher's fallback populates it."""
+        import main
+
+        path = tmp_path / "alfa_no_franchise.xlsx"
+        _write_alfa_xlsx(path, [
+            (1, 'POL001', 'ИВАНОВ И И', '01.01.1990', '01.01.2026', '31.12.2026',
+             'Амбулаторно-поликлиническое без стоматологии'),
+        ])
+
+        monkeypatch.setattr(main, 'detect_clinic',
+                            lambda *a, **kw: ('Клиника1', True, '123'))
+        monkeypatch.setattr(main, 'extract_policy_comment',
+                            lambda *a, **kw: 'CLINIC-MATCHER-FALLBACK')
+
+        stats = main.make_stats()
+        stats['master_path'] = str(tmp_path / 'master.xlsx')
+        config = {'processing': {'deduplicate': False}}
+
+        main.process_file(str(path), stats['master_path'], config, stats,
+                         existing_keys=set(), dry_run=True, pending=None)
+
+        assert len(stats['new_records']) == 1
+        assert stats['new_records'][0]['Комментарий в полис'] == 'CLINIC-MATCHER-FALLBACK'

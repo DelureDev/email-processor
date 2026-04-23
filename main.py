@@ -265,7 +265,12 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
             comment = extract_policy_comment(filepath)
         except Exception as e:
             logger.warning(f"Comment extraction failed for {filename}: {e}")
-    records = [{**r, 'Клиника': clinic, 'ID Клиники': clinic_id, 'Комментарий в полис': comment} for r in records]
+    records = [{
+        **r,
+        'Клиника': clinic,
+        'ID Клиники': clinic_id,
+        'Комментарий в полис': r.get('Комментарий в полис') or comment,
+    } for r in records]
 
     if clinic == '⚠️ Не определено':
         stats['unmatched_clinics'].append(filename)
