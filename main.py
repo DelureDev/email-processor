@@ -327,6 +327,9 @@ def make_stats() -> dict:
         'master_path': '',
         'unmatched_clinics': [],
         'missing_comments': [],
+        'run_start': None,         # datetime set by run_imap_mode / run_local_mode / run_test_mode
+        'smtp_status': 'SKIP',     # 'OK' | 'FAIL' | 'SKIP'
+        'network_status': 'SKIP',  # 'OK' | 'FAIL' | 'SKIP'
     }
 
 
