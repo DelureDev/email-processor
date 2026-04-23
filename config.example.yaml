@@ -12,6 +12,11 @@ imap:
   password: "${IMAP_PASSWORD}"        # set env var, or paste password directly
   folder: "INBOX"
   processed_folder: "Обработанные"     # move successfully parsed emails here (leave empty to disable)
+  # Path to the Zetta monthly-password disk cache (v1.10.8+).
+  # Gitignored, mode 0600 on POSIX, auto-expires when valid_to < today.
+  # The cache lets the pipeline skip IMAP SEARCH for the monthly password
+  # 29/30 days — makes Zetta extraction immune to Yandex FROM-filter flakes.
+  zetta_password_cache: "./zetta_password.json"
   days_back: 3                        # How many days back to scan
   subject_keywords:
     - "открепл"
@@ -59,7 +64,12 @@ output:
   # Only two file types are written here:
   #   records_YYYY-MM-DD.csv  — daily delta (appended across runs within the day)
   #   master_YYYY-MM.csv      — monthly cumulative (new file each month)
-  # csv_export_folder: "/mnt/storage"
+  # Network share path for daily + monthly CSV export.
+  # Empty string = disabled. Typically "/mnt/storage" on the production VM.
+  csv_export_folder: ""
+  # Seconds to wait when probing the network share at startup (default: 10).
+  # If the mount has gone dead, we skip the export rather than hang.
+  network_timeout: 10
 
 # --- Logging ---
 logging:
