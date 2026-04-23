@@ -46,7 +46,7 @@ Production VM: deploy via `git push` then `git pull` on VM.
 **Pipeline flow (IMAP mode):**
 `fetcher.py` → `detector.py` → `parsers/` → `clinic_matcher.py` → `writer.py` → `notifier.py`
 
-1. **`fetcher.py` (`IMAPFetcher`)** — connects to IMAP, filters emails by subject keywords, downloads `.xlsx`/`.xls`/`.zip` attachments to `./temp/`. Skips own report emails (`"Обработка списков ДМС"` in subject). Tracks processed message IDs (RFC 2822 `Message-ID` only) in SQLite (capped at 5000 entries) to avoid reprocessing. Two-pass logic: first collects all passwords from Zetta/Sber password emails, then extracts password-protected zips in a second pass. Emails are moved to the configured folder (`imap.processed_folder`, e.g. `"Обработанные"`) only AFTER batch write succeeds — if write fails, emails stay in INBOX for re-fetch.
+1. **`fetcher.py` (`IMAPFetcher`)** — connects to IMAP, filters emails by subject keywords, downloads `.xlsx`/`.xls`/`.zip` attachments to `./temp/`. Skips own report emails (`"Обработка списков ДМС"` in subject). Tracks processed message IDs (RFC 2822 `Message-ID` only) in SQLite (capped at 5000 entries) to avoid reprocessing. Two-pass logic for password-protected zips: first resolves Zetta/Sber passwords (cache → IMAP pre-scan → main-loop capture), then extracts zips in a second pass. The Zetta monthly password is cached to disk (`imap.zetta_password_cache`, default `./zetta_password.json`, mode 0600) on first discovery; subsequent runs skip the IMAP pre-scan entirely while the cache is still valid. IMAP SEARCH and FETCH are wrapped with retry helpers (`_search_with_retry`, `_safe_fetch_rfc822`) to survive Yandex `[UNAVAILABLE]` errors, expunged UIDs, and transport-level disconnects. Cyrillic folder names (e.g. `Обработанные`) are encoded with modified UTF-7 (RFC 3501) via `imap_utf7_encode` before every `select()` / `COPY`. Emails are moved to `imap.processed_folder` only AFTER batch write succeeds — if the write fails, emails stay in INBOX for re-fetch and `_save_processed_ids()` is skipped too.
 
 2. **`zetta_handler.py`** — all logic for password-protected ZIPs (Zetta Insurance and Sberbank). Handles two Zetta password flows: monthly passwords from `parollpu@zettains.ru` and per-email passwords from `pulse.letter@zettains.ru`. `try_passwords()` tries cp866 then utf-8 encoding for each password. Zip Slip guard validates extracted paths stay inside extraction directory.
 
@@ -57,7 +57,7 @@ Production VM: deploy via `git push` then `git pull` on VM.
 
 4. **`parsers/`** — one `.py` file per insurer, each exports a `parse(filepath) -> list[dict]` function. Registered in `parsers/__init__.py` as the `PARSERS` dict mapping format name → function. All parsers return records with the canonical 7-field schema: `ФИО`, `Дата рождения`, `№ полиса`, `Начало обслуживания`, `Конец обслуживания`, `Страховая компания`, `Страхователь`. (`Клиника`, `Комментарий в полис`, `Источник файла`, `Дата обработки` are added by `main.py`/`writer.py`.)
 
-5. **`clinic_matcher.py`** — runs once per file after parsing. `detect_clinic(filepath, subject=None)` returns `(clinic_name, extract_comment, clinic_id)`. Scans both the xlsx content (first 50 rows, lowercased) and the email subject against `clinics.yaml` keywords (longest-first to prevent partial matches). Subject scanning is essential for VSK where clinic name is in the email subject, not the file. No match → `"⚠️ Не определено"`. If `extract_comment=True`, `extract_policy_comment(filepath)` is also called — two strategies: (1) scan rows 0-19 for known column headers (`_COMMENT_COLUMNS`), take first non-empty data cell below; (2) scan all rows for free-text cells >20 chars containing program description keywords. Current `_COMMENT_COLUMNS` include `'группа, № договора'` (Alfa attachment format). Detachment/removal files ("открепляем" or "снятия с медицинского обслуживания" in content) return `('', False, '')` — empty clinic, no warning, no comment extraction.
+5. **`clinic_matcher.py`** — runs once per file after parsing. `detect_clinic(filepath, subject=None)` returns `(clinic_name, extract_comment, clinic_id)`. Scans both the xlsx content (first 50 rows, lowercased) and the email subject against `clinics.yaml` keywords (longest-first to prevent partial matches). Subject scanning is essential for VSK where clinic name is in the email subject, not the file. No match → `"⚠️ Не определено"`. If `extract_comment=True`, `extract_policy_comment(filepath)` is also called — two strategies: (1) scan rows 0-19 for known column headers (`_COMMENT_COLUMNS`), take first non-empty data cell below; (2) scan all rows for free-text cells >20 chars containing program description keywords. Current `_COMMENT_COLUMNS` include `'группа, № договора'` (Alfa attachment format). Detachment/removal files (`открепляем`, `снятия с медицинского`, or `снять с медицинского` in content) return `('', False, '')` — empty clinic, no warning, no comment extraction.
 
 6. **`clinics.yaml`** — configurable clinic lookup table. Each entry has `name`, `id` (for 1C), `keywords` list, and optional `extract_comment: true` flag. Keywords sorted longest-first automatically at load time. Add new clinics here without touching Python code.
 
@@ -81,6 +81,7 @@ Key config options added since v1.0:
 - `imap.processed_folder` — folder name to move processed emails into (e.g. `"Обработанные"`)
 - `output.csv_export_folder` — network share path for daily + monthly CSV export
 - `output.network_timeout` — seconds to wait for network share accessibility (default: 10)
+- `imap.zetta_password_cache` — path to the Zetta monthly-password disk cache (default: `./zetta_password.json`). Gitignored, mode 0600, auto-expires when `valid_to < today`. See CHANGELOG v1.10.8.
 - `clinics.yaml` — separate file, not inside `config.yaml`
 
 ## Shared parser utilities
@@ -115,15 +116,6 @@ git push origin main
 git push origin v1.2.3
 ```
 
-## VM terminal constraint
-
-**Never give the user multiline code to paste into the VM terminal.** The SSH terminal adds leading spaces to every pasted line, causing `IndentationError` every time. When Python needs to run on the VM:
-- Write a `.py` script file, commit+push, user runs `git pull && python3 script.py`
-- For true one-liners only: `python3 -c "import x; print(x)"` (no indented blocks inside)
-- Shell: single-line commands only, no multiline heredocs
-
-## Versioning & releases
-
 4. Deploy to VM — always include this step after pushing, without waiting to be asked:
 ```bash
 # On VM:
@@ -140,17 +132,33 @@ git pull
 
 **Never skip the tag step after meaningful changes.** Patch bumps are fine for small fixes — the important thing is that every pushed change has a corresponding version so the VM always runs a known, tagged release.
 
+## VM terminal constraint
+
+**Never give the user multiline code to paste into the VM terminal.** The SSH terminal adds leading spaces to every pasted line, causing `IndentationError` every time. When Python needs to run on the VM:
+- Write a `.py` script file, commit+push, user runs `git pull && python3 script.py`
+- For true one-liners only: `python3 -c "import x; print(x)"` (no indented blocks inside)
+- Shell: single-line commands only, no multiline heredocs
+
 ## Fix history
 
-See `CHANGELOG.md` for per-version details. Current version: **v1.10.0**.
+See `CHANGELOG.md` for per-version details. Current version: **v1.10.8**.
 
 ## Security hardening
 
 - **Credentials** — `config.yaml` uses `${IMAP_PASSWORD}` / `${SMTP_PASSWORD}` env vars. Never commit plaintext credentials.
+- **Env-var validation (v1.10.7)** — `_expand_env()` raises `ValueError` on any unresolved `${VAR}` placeholder in config. Prevents IMAP account lockout from repeated failed login with literal `"${IMAP_PASSWORD}"`.
 - **Formula injection** — `writer.py` sanitizes cell values starting with `=`, `+`, `-`, `@`, `\n`, `\t`, `\r`, `|` to prevent xlsx formula injection.
 - **File locking** — `writer.py` acquires exclusive `fcntl` lock around master.xlsx and master.csv writes (prevents data corruption from overlapping cron runs).
 - **SMTP timeout** — 30s timeout on all SMTP operations in `notifier.py`.
 - **Audit log** — separate `audit` logger writing to `./logs/audit.log`. Events: `ZETTA_MONTHLY_PASSWORD_EXTRACTED`, `PASSWORD_EXTRACTED`, `ZIP_EXTRACT`. Never logs actual password values. Override path via `config.yaml` → `logging.audit_file`.
+- **Zetta password cache mode 0600 (v1.10.8)** — atomic tmp+rename write, chmod 0600 on POSIX. Gitignored. Stores the current month's password + validity window.
+- **Cyrillic folder UTF-7 encoding (v1.10.6)** — all IMAP `select()` / `COPY` calls route folder names through `imap_utf7_encode()` (RFC 3501 modified UTF-7). Previously failed silently on Cyrillic folders like `Обработанные`.
+
+## Ops
+
+- **Manual backup** — `bash backup.sh` creates a timestamped `tar.gz` of the project (excluding `.git`, `temp/`, `__pycache__/`, `*.pyc`) in `/home/adminos/backups/email-processor/`. Keeps the 10 most recent. Safe to run anytime.
+- **Setup** — see `SETUP.md` for clean-VM onboarding.
+- **Failure recovery** — see `RECOVERY.md` for runbooks (Yandex lockout, CIFS mount down, corrupt master, stale password cache, missed cron).
 
 ## Observability & output
 
@@ -165,3 +173,8 @@ See `CHANGELOG.md` for per-version details. Current version: **v1.10.0**.
 - **`ё` → `е` normalization** — applied in both dedup key (`main.py`) and `load_existing_keys()` (`writer.py`) to prevent false duplicates.
 - **Clinic column** — `Клиника` populated for every record; `"⚠️ Не определено"` if no keyword match. Part of dedup key.
 - **Policy comment** — `Комментарий в полис` extracted only when clinic has `extract_comment: true` in `clinics.yaml`.
+- **Zetta password cache** — monthly password persisted to `./zetta_password.json`; skips IMAP pre-scan when valid. Watch for `Using cached Zetta monthly password` in the log.
+- **IMAP SEARCH retry** — password pre-scan and main SEARCH both retry 3× with 3s backoff on non-OK Yandex responses. Main SEARCH raises on persistent failure (surfaces as `stats['errors']` + red healthcheck).
+- **IMAP FETCH guards** — `_safe_fetch_rfc822()` retries on transport errors (`imaplib.IMAP4.abort`, `ssl.SSLError`, `OSError`) and returns `None` for expunged UIDs.
+- **Write-failure protection** — if `write_batch_to_master` fails, `_save_processed_ids()` is skipped AND emails stay in INBOX. Next run re-fetches.
+- **Process-level lock** — `main.py` holds an fcntl exclusive lock on `./logs/main.lock` at startup. Prevents concurrent cron + manual runs from producing duplicate writes or duplicate email reports.
