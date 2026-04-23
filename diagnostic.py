@@ -27,18 +27,10 @@ from datetime import datetime, timedelta
 import pandas as pd
 import yaml
 
+from main import _expand_env
+
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
-
-def _expand_env(obj):
-    """Recursively expand ${VAR_NAME} placeholders in config values."""
-    if isinstance(obj, str):
-        return re.sub(r'\$\{(\w+)\}', lambda m: os.environ.get(m.group(1), m.group(0)), obj)
-    if isinstance(obj, dict):
-        return {k: _expand_env(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_expand_env(i) for i in obj]
-    return obj
 
 
 def load_config(path="config.yaml"):
