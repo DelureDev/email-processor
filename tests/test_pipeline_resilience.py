@@ -51,6 +51,7 @@ class TestWriteBatchFailure:
         assert any('Disk full' in e for e in stats['errors'])
         # Should NOT have moved emails
         mock_fetcher.move_to_folder.assert_not_called()
+        mock_fetcher._save_processed_ids.assert_not_called()
         # new_records should be cleared since write failed
         assert stats['new_records'] == []
         assert stats['total_records'] == 0
