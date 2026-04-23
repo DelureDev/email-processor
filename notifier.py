@@ -275,6 +275,16 @@ def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
     new_records = stats.get('new_records', [])
     if new_records:
         body += f"<p style='color: gray; font-size: 12px;'>Новые записи во вложении ({len(new_records)} шт.).</p>"
+
+    # ── Log tail for failure triage (v1.10.12) ──
+    if has_problems:
+        run_start = stats.get('run_start')
+        log_path = smtp_cfg.get('log_file') or './logs/processor.log'
+        if run_start:
+            tail_html = _build_log_tail_html(log_path, run_start)
+            if tail_html:
+                body += tail_html
+
     body += "</body></html>"
 
     msg.attach(MIMEText(body, 'html', 'utf-8'))

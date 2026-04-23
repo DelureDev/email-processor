@@ -184,3 +184,63 @@ class TestBuildLogTailHtml:
         result = _build_log_tail_html(str(log), datetime(2026, 4, 23, 15, 30, 0))
         assert '&lt;tag&gt;' in result
         assert '<tag>' not in result
+
+
+def _get_html_body(msg):
+    """Extract decoded HTML body from a MIMEMultipart message."""
+    for part in msg.walk():
+        if part.get_content_type() == 'text/html':
+            payload = part.get_payload(decode=True)
+            if payload:
+                return payload.decode('utf-8')
+    return ''
+
+
+def test_log_tail_included_on_failure(tmp_path):
+    """When has_problems is True, email body contains the log <details> block."""
+    from notifier import _build_message
+    from datetime import datetime as _datetime
+    log = tmp_path / 'processor.log'
+    log.write_text(
+        "2026-04-23 15:30:05,000 [ERROR] main: something failed\n",
+        encoding='utf-8'
+    )
+    smtp_cfg = {
+        'from_address': 'test@test.com',
+        'recipients': ['real@test.com'],
+        'log_file': str(log),
+    }
+    stats = {
+        'total_records': 0, 'files_processed': 0, 'files_skipped': 0,
+        'errors': ['Simulated error'], 'unknown_files': [], 'skipped_files': [],
+        'unmatched_clinics': [], 'missing_comments': [], 'empty_files': [],
+        'new_records': [], 'by_company': {},
+        'run_start': _datetime(2026, 4, 23, 15, 30, 0),
+    }
+    msg = _build_message(smtp_cfg, stats)
+    body = _get_html_body(msg)
+    assert 'Последние строки лога' in body
+    assert 'something failed' in body
+
+
+def test_log_tail_absent_on_success(tmp_path):
+    """When has_problems is False, the log block is NOT included."""
+    from notifier import _build_message
+    from datetime import datetime as _datetime
+    log = tmp_path / 'processor.log'
+    log.write_text("2026-04-23 15:30:05,000 [INFO] main: ok\n", encoding='utf-8')
+    smtp_cfg = {
+        'from_address': 'test@test.com',
+        'recipients': ['real@test.com'],
+        'log_file': str(log),
+    }
+    stats = {
+        'total_records': 10, 'files_processed': 1, 'files_skipped': 0,
+        'errors': [], 'unknown_files': [], 'skipped_files': [],
+        'unmatched_clinics': [], 'missing_comments': [], 'empty_files': [],
+        'new_records': [], 'by_company': {'VSK': 10},
+        'run_start': _datetime(2026, 4, 23, 15, 30, 0),
+    }
+    msg = _build_message(smtp_cfg, stats)
+    body = _get_html_body(msg)
+    assert 'Последние строки лога' not in body
