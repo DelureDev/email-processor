@@ -20,7 +20,7 @@ uids = msgs[0].split() if msgs[0] else []
 print(f"Found {len(uids)} email(s)\n")
 
 for uid in uids[-1:]:  # just the most recent one
-    _, data = m.uid('FETCH', uid, '(RFC822)')
+    _, data = m.uid('FETCH', uid.decode(), '(RFC822)')
     msg = email.message_from_bytes(data[0][1])
     print(f"Subject: {msg.get('Subject')}")
     print(f"Date: {msg.get('Date')}")
