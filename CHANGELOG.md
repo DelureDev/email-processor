@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.6] - 2026-04-23
+### Fixed
+- Cyrillic IMAP folder names (e.g. `Обработанные`) now encoded with IMAP modified UTF-7 (RFC 3501) before `select()` — previously `imaplib` raised `UnicodeEncodeError` and silently skipped the processed folder during Zetta password scan
+- Added `import email.message` to `fetcher.py` — latent `AttributeError` on module import when imported outside `main.py`
+- Zetta monthly password SEARCH now retries up to 3× on `[UNAVAILABLE]` server error before giving up — intermittent server failures were silently dropping the password and causing all Zetta ZIPs to fail
+- UID from IMAP SEARCH decoded to str before `FETCH` — some servers reject raw bytes in the command argument
+- `dump_zetta_password_email.py` made self-contained (no `fetcher` import), checks SEARCH response type, searches with `SINCE` date to avoid full-mailbox scan
+
 ## [1.10.3] - 2026-04-23
 ### Fixed
 - `_print_summary` replaced `print()` with `logger.info()` — cron ASCII stdout was raising `UnicodeEncodeError` on Cyrillic error messages, silently killing the pipeline before email/export ran
