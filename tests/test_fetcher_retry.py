@@ -86,3 +86,16 @@ def test_expired_monthly_password_not_marked_processed():
     assert not _should_mark_monthly_processed({'valid_to': 'garbage'}, today=today)
     # None value — fail safe
     assert not _should_mark_monthly_processed({'valid_to': None}, today=today)
+
+
+def test_imap_utf7_encode_handles_cyrillic():
+    """Known folder names must round-trip through imap_utf7_encode correctly."""
+    from fetcher import imap_utf7_encode
+    # ASCII: pass through unchanged
+    assert imap_utf7_encode('INBOX') == 'INBOX'
+    # Cyrillic: must start with '&' and end with '-' per RFC 3501 modified UTF-7
+    encoded = imap_utf7_encode('Обработанные')
+    assert encoded.startswith('&')
+    assert encoded.endswith('-')
+    # Ampersand must be escaped as '&-' per RFC 3501
+    assert imap_utf7_encode('A&B') == 'A&-B'
