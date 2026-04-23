@@ -141,7 +141,7 @@ git pull
 
 ## Fix history
 
-See `CHANGELOG.md` for per-version details. Current version: **v1.10.8**.
+See `CHANGELOG.md` for per-version details. Current version: **v1.10.10**.
 
 ## Security hardening
 

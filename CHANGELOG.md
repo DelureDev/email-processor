@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.10] - 2026-04-23
+### Fixed
+- Pidfile lock (`main.py`) now distinguishes `BlockingIOError` (another instance running — harmless, exit 0) from `PermissionError` (lockfile owned by another UID — exit 2 with stderr). Previously `EACCES` was silently treated as "already running" so a leftover-root lockfile would make cron silently no-op forever.
+- Zetta extract dirs now tracked up front in `run_imap_mode` and cleaned in `finally`, so a `process_file` exception mid-loop no longer leaks temp dirs for files in the same zip.
+- `SETUP.md` and `.env.example` no longer reference a `HEALTHCHECK_URL` env var — the code reads `healthcheck_url` directly from `config.yaml`; docs updated to match.
+- `CLAUDE.md` version stamp bumped to v1.10.10 (was still showing v1.10.8 post-v1.10.9 release).
+
 ## [1.10.9] - 2026-04-23
 ### Fixed
 - Pidfile lock on `main.py` (`./logs/main.lock`, fcntl, non-blocking) prevents concurrent cron + manual runs from producing duplicate email reports or stale-dedup writes.

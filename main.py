@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.10.9"
+__version__ = "1.10.10"
 
 import os
 import re
@@ -510,10 +510,17 @@ def run_imap_mode(config: dict, dry_run: bool = False):
     fetcher = IMAPFetcher(config, dry_run=dry_run)
     pending = []
     processed_imap_ids = []
+    # Track all Zetta extract dirs up front so we can clean them in finally,
+    # even if process_file throws mid-loop (otherwise dirs for later files in
+    # the same zip would leak because only the last att carries _extract_dir).
+    extract_dirs_to_clean: set[str] = set()
     try:
         fetcher.connect()
         days_back = config.get('imap', {}).get('days_back', 7)
         attachments = fetcher.fetch_attachments(days_back=days_back)
+        for att in attachments:
+            if att.get('_extract_dir'):
+                extract_dirs_to_clean.add(att['_extract_dir'])
 
         for att in attachments:
             process_file(att['filepath'], master_path, config, stats,
@@ -535,16 +542,16 @@ def run_imap_mode(config: dict, dry_run: bool = False):
                     os.remove(os.path.splitext(att['filepath'])[0] + '.xlsx')
                 except OSError:
                     pass
-            # Clean up Zetta extract dir
-            extract_dir = att.get('_extract_dir')
-            if extract_dir:
-                try:
-                    shutil.rmtree(extract_dir, ignore_errors=True)
-                except OSError:
-                    pass
     except Exception as e:
         logger.error(f"IMAP error: {e}", exc_info=True)
         stats['errors'].append(f"IMAP error: {e}")
+    finally:
+        # Clean up every Zetta extract dir we collected, regardless of how we exited
+        for extract_dir in extract_dirs_to_clean:
+            try:
+                shutil.rmtree(extract_dir, ignore_errors=True)
+            except OSError:
+                pass
 
     # Surface Zetta zip failures in email report
     if fetcher.failed_zips:
@@ -749,18 +756,22 @@ def _print_summary(stats: dict) -> None:
 
 if __name__ == '__main__':
     if sys.platform != 'win32':
-        import errno
         import fcntl
         _LOCK_PATH = './logs/main.lock'
         os.makedirs(os.path.dirname(_LOCK_PATH), exist_ok=True)
         _lock_fh = open(_LOCK_PATH, 'w')
         try:
             fcntl.flock(_lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as e:
-            if e.errno in (errno.EACCES, errno.EAGAIN):
-                print("Another instance of main.py is already running (./logs/main.lock). Exiting.")
-                sys.exit(0)
-            raise
+        except BlockingIOError:
+            # Another instance holds the lock — normal collision, not an error
+            print("Another instance of main.py is already running (./logs/main.lock). Exiting.")
+            sys.exit(0)
+        except PermissionError as e:
+            # Usually: lockfile owned by another UID (e.g. leftover from 'sudo python3 main.py').
+            # This must NOT be treated as "already running" — cron would silently no-op forever.
+            print(f"Cannot acquire ./logs/main.lock — permission denied ({e}). "
+                  "Check file ownership: ls -la ./logs/main.lock", file=sys.stderr)
+            sys.exit(2)
 
     parser = argparse.ArgumentParser(
         description='Email → XLSX Processor — extracts insurance data into master spreadsheet',

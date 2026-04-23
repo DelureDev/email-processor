@@ -129,9 +129,10 @@ If configured: https://healthchecks.io/ dashboard should show green ping.
 |----------|---------|----------|
 | `IMAP_PASSWORD` | Yandex app password for IMAP login | Yes |
 | `SMTP_PASSWORD` | Yandex app password for SMTP send | Yes |
-| `HEALTHCHECK_URL` | Optional: healthchecks.io ping URL | No |
 
 Unresolved `${VAR}` placeholders in `config.yaml` raise `ValueError` at startup — no silent fallback to literal strings (prevents Yandex account lockout from repeated failed login with `"${IMAP_PASSWORD}"` as password).
+
+The healthcheck URL goes directly in `config.yaml` as `healthcheck_url: "https://hc-ping.com/your-uuid"` — it is not read from an env var. Leave empty to disable.
 
 ## Next steps
 
