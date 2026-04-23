@@ -13,6 +13,7 @@ import pandas as pd
 import logging
 
 from parsers.utils import format_date, get_cell_str
+from clinic_matcher import _COMMENT_COLUMNS
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ def parse(filepath: str) -> list[dict]:
     col_group = 5
     col_start = 6
     col_end = 7
+    col_comment = None  # set only if comment-column header matches _COMMENT_COLUMNS
 
     # Try to find header row and map columns
     header_found = False
@@ -65,6 +67,9 @@ def parse(filepath: str) -> list[dict]:
                 # "Дата прикрепления" — treat as start date
                 elif 'дата' in h and 'прикреплен' in h:
                     col_start = ci
+                # Match comment-column headers (shared with clinic_matcher)
+                elif any(kw in h for kw in _COMMENT_COLUMNS):
+                    col_comment = ci
             # Check next row for "с" / "по" sub-headers
             if hi + 1 < len(df):
                 for ci in range(len(df.columns)):
@@ -125,6 +130,12 @@ def parse(filepath: str) -> list[dict]:
                 'Страховая компания': 'АльфаСтрахование',
                 'Страхователь': strahovatel,
             }
+            # Per-row franchise comment (v1.10.13): if this row's comment column contains
+            # "Франшиза" (case-insensitive), capture the full cell text for Комментарий в полис.
+            if col_comment is not None:
+                cell = get_cell_str(df, i, col_comment)
+                if cell and 'франшиза' in cell.lower():
+                    record['Комментарий в полис'] = cell
             results.append(record)
         except Exception as e:
             logger.warning(f"ALFA: Skipping row {i} due to error: {e}")
