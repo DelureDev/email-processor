@@ -187,3 +187,60 @@ class TestPasswordCacheSkipsImapScan:
         loaded = zetta_password_cache.load(str(cache_path))
         assert loaded is not None
         assert loaded['password'] == 'freshly-found-pw'
+
+
+def test_main_loop_monthly_password_also_saves_to_cache(tmp_path, monkeypatch):
+    """Main-search loop's monthly-password branches must also save to cache."""
+    from unittest.mock import MagicMock
+    import zetta_password_cache
+    from fetcher import IMAPFetcher
+
+    cache_path = tmp_path / 'zetta_password.json'
+    assert not cache_path.exists()
+
+    config = {
+        'imap': {'server': 's', 'port': 993, 'username': 'u', 'password': 'p',
+                 'folder': 'INBOX', 'processed_folder': '',
+                 'zetta_password_cache': str(cache_path),
+                 'allowed_senders': ['alfastrah.ru'],
+                 'subject_keywords': ['dms']},
+        'processing': {'temp_folder': str(tmp_path), 'processed_ids_file': str(tmp_path / 'ids.db')},
+    }
+    fetcher = IMAPFetcher(config, dry_run=True)
+    fetcher.mail = MagicMock()
+    fetcher.mail.select = MagicMock(return_value=('OK', [b'0']))
+
+    # SEARCH(password-prescan, which runs because no cache): returns empty
+    # SEARCH(main, days_back): returns one UID
+    # FETCH(that uid): returns bytes for a Zetta monthly-password email
+    fetcher.mail.uid = MagicMock(side_effect=[
+        ('OK', [b'']),   # password pre-scan SEARCH
+        ('OK', [b'99']), # main SEARCH
+        ('OK', [(b'header', b'body-bytes')]),  # FETCH for uid 99
+    ])
+
+    # The email doesn't match allowed_senders/subject_keywords, so it falls into
+    # Branch A (the "not self._matches_filter(msg)" path). Make the sender match
+    # `is_zetta_monthly_password_email`.
+    fake_msg = MagicMock()
+    fake_msg.get = lambda k, d=None: {
+        'From': 'parollpu@zettains.ru',
+        'Subject': 'random unrelated subject',
+        'Date': '',
+        'Message-ID': '<m99>',
+    }.get(k, d)
+    fake_msg.walk = lambda: []
+
+    monkeypatch.setattr('fetcher.email.message_from_bytes', lambda raw: fake_msg)
+    monkeypatch.setattr('fetcher._extract_monthly_pwd_from_msg',
+                        lambda msg: {'password': 'mainloop-pw',
+                                     'valid_from': '01.04.2026',
+                                     'valid_to': '30.04.2026'})
+
+    fetcher.fetch_attachments(days_back=3)
+
+    # Assert cache was saved by Branch A
+    assert cache_path.exists()
+    loaded = zetta_password_cache.load(str(cache_path))
+    assert loaded is not None
+    assert loaded['password'] == 'mainloop-pw'

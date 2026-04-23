@@ -426,6 +426,15 @@ class IMAPFetcher:
                         if monthly['password'] not in zetta_passwords:
                             zetta_passwords.insert(0, monthly['password'])
                             logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
+                        if _should_mark_monthly_processed(monthly):
+                            try:
+                                zetta_password_cache.save(
+                                    self.zetta_password_cache_path,
+                                    monthly['password'],
+                                    monthly['valid_from'],
+                                    monthly['valid_to'])
+                            except OSError as e:
+                                logger.warning(f"Could not write Zetta password cache: {e}")
                         self.processed_ids.add(message_id)
                 continue
 
@@ -444,9 +453,19 @@ class IMAPFetcher:
                 # First check if it's a monthly password email
                 if is_zetta_monthly_password_email(sender):
                     monthly = _extract_monthly_pwd_from_msg(msg)
-                    if monthly and monthly['password'] not in zetta_passwords:
-                        zetta_passwords.insert(0, monthly['password'])
-                        logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
+                    if monthly:
+                        if monthly['password'] not in zetta_passwords:
+                            zetta_passwords.insert(0, monthly['password'])
+                            logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
+                        if _should_mark_monthly_processed(monthly):
+                            try:
+                                zetta_password_cache.save(
+                                    self.zetta_password_cache_path,
+                                    monthly['password'],
+                                    monthly['valid_from'],
+                                    monthly['valid_to'])
+                            except OSError as e:
+                                logger.warning(f"Could not write Zetta password cache: {e}")
                 else:
                     # Per-email password (pulse.letter or Sber)
                     for part in msg.walk():
