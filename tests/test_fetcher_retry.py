@@ -99,3 +99,91 @@ def test_imap_utf7_encode_handles_cyrillic():
     assert encoded.endswith('-')
     # Ampersand must be escaped as '&-' per RFC 3501
     assert imap_utf7_encode('A&B') == 'A&-B'
+
+
+class TestPasswordCacheSkipsImapScan:
+    """When a valid password cache exists, the IMAP pre-scan must NOT run."""
+
+    def test_valid_cache_skips_imap_prescan(self, tmp_path, monkeypatch):
+        from unittest.mock import MagicMock
+        import zetta_password_cache
+        from fetcher import IMAPFetcher
+
+        # Write a valid cache file
+        cache_path = tmp_path / 'zetta_password.json'
+        zetta_password_cache.save(str(cache_path), 'cached-pw', '01.04.2026', '30.04.2026')
+
+        config = {
+            'imap': {'server': 's', 'port': 993, 'username': 'u', 'password': 'p',
+                     'folder': 'INBOX', 'processed_folder': 'Processed',
+                     'zetta_password_cache': str(cache_path)},
+            'processing': {'temp_folder': str(tmp_path), 'processed_ids_file': str(tmp_path / 'ids.db')},
+        }
+        fetcher = IMAPFetcher(config, dry_run=True)
+
+        # Mock IMAP so we can assert what's called
+        fetcher.mail = MagicMock()
+        fetcher.mail.select = MagicMock(return_value=('OK', [b'0']))
+        # Main SEARCH returns empty — we only care about whether password SEARCH ran
+        fetcher.mail.uid = MagicMock(return_value=('OK', [b'']))
+
+        # Patch today via zetta_password_cache's datetime
+        from datetime import datetime as real_dt
+        class FixedDatetime(real_dt):
+            @classmethod
+            def now(cls):
+                return real_dt(2026, 4, 23)
+        monkeypatch.setattr('zetta_password_cache.datetime', FixedDatetime)
+        monkeypatch.setattr('fetcher.datetime', FixedDatetime)
+
+        fetcher.fetch_attachments(days_back=3)
+
+        # Assert: no SEARCH call with FROM parollpu@zettains.ru
+        search_criteria = [c.args[2] for c in fetcher.mail.uid.call_args_list
+                           if len(c.args) >= 3 and c.args[0] == 'SEARCH']
+        for crit in search_criteria:
+            assert 'parollpu@zettains.ru' not in crit, \
+                f"IMAP pre-scan still ran despite valid cache; criteria was: {crit}"
+
+    def test_imap_scan_saves_password_to_cache(self, tmp_path, monkeypatch):
+        """After the IMAP pre-scan finds a password, it must be written to cache."""
+        from unittest.mock import MagicMock
+        import zetta_password_cache
+        from fetcher import IMAPFetcher
+
+        cache_path = tmp_path / 'zetta_password.json'
+        # No cache initially
+        assert not cache_path.exists()
+
+        config = {
+            'imap': {'server': 's', 'port': 993, 'username': 'u', 'password': 'p',
+                     'folder': 'INBOX', 'processed_folder': '',
+                     'zetta_password_cache': str(cache_path)},
+            'processing': {'temp_folder': str(tmp_path), 'processed_ids_file': str(tmp_path / 'ids.db')},
+        }
+        fetcher = IMAPFetcher(config, dry_run=True)
+        fetcher.mail = MagicMock()
+        fetcher.mail.select = MagicMock(return_value=('OK', [b'0']))
+
+        # Fake IMAP responses: SEARCH finds one UID, FETCH returns a body we can
+        # parse as monthly password email. We patch _extract_monthly_pwd_from_msg
+        # to return a deterministic dict rather than constructing a real email.
+        fetcher.mail.uid = MagicMock(side_effect=[
+            ('OK', [b'42']),  # password SEARCH returns UID 42
+            ('OK', [(b'header', b'dummy-rfc822-bytes')]),  # FETCH
+            ('OK', [b'']),  # main SEARCH returns nothing
+        ])
+        monkeypatch.setattr('fetcher._extract_monthly_pwd_from_msg',
+                            lambda msg: {'password': 'freshly-found-pw',
+                                         'valid_from': '01.04.2026',
+                                         'valid_to': '30.04.2026'})
+        monkeypatch.setattr('fetcher.email.message_from_bytes',
+                            lambda raw: MagicMock(get=lambda k, d=None: '<msg-id>'))
+
+        fetcher.fetch_attachments(days_back=3)
+
+        # Assert cache file now exists and contains the discovered password
+        assert cache_path.exists()
+        loaded = zetta_password_cache.load(str(cache_path))
+        assert loaded is not None
+        assert loaded['password'] == 'freshly-found-pw'

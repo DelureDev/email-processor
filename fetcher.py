@@ -16,6 +16,8 @@ import tempfile
 import logging
 from datetime import datetime, timedelta
 
+import zetta_password_cache
+
 logger = logging.getLogger(__name__)
 
 # English month names for IMAP SEARCH (strftime %b is locale-dependent)
@@ -154,6 +156,8 @@ class IMAPFetcher:
         self.password = config['imap']['password']
         self.folder = config['imap']['folder']
         self.processed_folder = config['imap'].get('processed_folder', '').strip()
+        self.zetta_password_cache_path = config['imap'].get(
+            'zetta_password_cache', './zetta_password.json')
         self.allowed_senders = config['imap'].get('allowed_senders', [])
         self.subject_keywords = config['imap'].get('subject_keywords', [])
         self.temp_folder = config['processing']['temp_folder']
@@ -310,47 +314,63 @@ class IMAPFetcher:
         if self.processed_folder and self.processed_folder != self.folder:
             pwd_search_folders.append(self.processed_folder)
 
-        for pwd_folder in pwd_search_folders:
-            try:
-                self.mail.select(imap_utf7_encode(pwd_folder))
-            except Exception as e:
-                logger.debug(f"Cannot select folder {pwd_folder} for password scan: {e}")
-                continue
-            pwd_msgs = None
-            status, data = _search_with_retry(
-                self.mail, None, f'(SINCE {pwd_since} FROM "parollpu@zettains.ru")')
-            if status != 'OK':
-                logger.debug(f"No Zetta monthly password email found in {pwd_folder} (SEARCH failed after retries)")
-                continue
-            pwd_msgs = data
-            if pwd_msgs is None or not pwd_msgs[0]:
-                logger.debug(f"No Zetta monthly password email found in {pwd_folder}")
-                continue
-            logger.info(f"Found {len(pwd_msgs[0].split())} Zetta monthly password email(s) in {pwd_folder}")
-            for uid in pwd_msgs[0].split():
+        # Try cached monthly password first — avoids a Yandex SEARCH roundtrip
+        # which can be flaky for FROM-filtered queries.
+        cached = zetta_password_cache.load(self.zetta_password_cache_path)
+        if cached:
+            zetta_passwords.insert(0, cached['password'])
+            logger.info(f"Using cached Zetta monthly password (valid {cached['valid_from']} - {cached['valid_to']})")
+
+        if not zetta_passwords:
+            for pwd_folder in pwd_search_folders:
                 try:
-                    raw = _safe_fetch_rfc822(self.mail, uid.decode())
-                    if raw is None:
-                        logger.warning(f"Password email UID {uid.decode()} unavailable (expunged or FETCH failed)")
-                        continue
-                    msg = email.message_from_bytes(raw)
-                    message_id = msg.get('Message-ID', uid.decode())
-                    monthly = _extract_monthly_pwd_from_msg(msg)
-                    if monthly:
-                        if monthly['password'] not in zetta_passwords:
-                            zetta_passwords.insert(0, monthly['password'])
-                            logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
-                        if _should_mark_monthly_processed(monthly):
-                            self.processed_ids.add(message_id)
-                        else:
-                            logger.info(f"Monthly password email for {monthly.get('valid_to')} is stale — not marking processed")
-                    else:
-                        logger.warning(f"Zetta monthly password email found in {pwd_folder} but could not extract password — format may have changed")
-                    # If extraction returned None — do NOT mark processed, retry next run
+                    self.mail.select(imap_utf7_encode(pwd_folder))
                 except Exception as e:
-                    logger.debug(f"Error reading password email: {e}")
-            if zetta_passwords:
-                break  # found password, no need to check other folders
+                    logger.debug(f"Cannot select folder {pwd_folder} for password scan: {e}")
+                    continue
+                pwd_msgs = None
+                status, data = _search_with_retry(
+                    self.mail, None, f'(SINCE {pwd_since} FROM "parollpu@zettains.ru")')
+                if status != 'OK':
+                    logger.debug(f"No Zetta monthly password email found in {pwd_folder} (SEARCH failed after retries)")
+                    continue
+                pwd_msgs = data
+                if pwd_msgs is None or not pwd_msgs[0]:
+                    logger.debug(f"No Zetta monthly password email found in {pwd_folder}")
+                    continue
+                logger.info(f"Found {len(pwd_msgs[0].split())} Zetta monthly password email(s) in {pwd_folder}")
+                for uid in pwd_msgs[0].split():
+                    try:
+                        raw = _safe_fetch_rfc822(self.mail, uid.decode())
+                        if raw is None:
+                            logger.warning(f"Password email UID {uid.decode()} unavailable (expunged or FETCH failed)")
+                            continue
+                        msg = email.message_from_bytes(raw)
+                        message_id = msg.get('Message-ID', uid.decode())
+                        monthly = _extract_monthly_pwd_from_msg(msg)
+                        if monthly:
+                            if monthly['password'] not in zetta_passwords:
+                                zetta_passwords.insert(0, monthly['password'])
+                                logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
+                            if _should_mark_monthly_processed(monthly):
+                                self.processed_ids.add(message_id)
+                                try:
+                                    zetta_password_cache.save(
+                                        self.zetta_password_cache_path,
+                                        monthly['password'],
+                                        monthly['valid_from'],
+                                        monthly['valid_to'])
+                                except OSError as e:
+                                    logger.warning(f"Could not write Zetta password cache: {e}")
+                            else:
+                                logger.info(f"Monthly password email for {monthly.get('valid_to')} is stale — not marking processed")
+                        else:
+                            logger.warning(f"Zetta monthly password email found in {pwd_folder} but could not extract password — format may have changed")
+                        # If extraction returned None — do NOT mark processed, retry next run
+                    except Exception as e:
+                        logger.debug(f"Error reading password email: {e}")
+                if zetta_passwords:
+                    break  # found password, no need to check other folders
 
         if not zetta_passwords:
             logger.warning("Zetta monthly password not found in any folder — zips will fail if no per-email passwords arrive")

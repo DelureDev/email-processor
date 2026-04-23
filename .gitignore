@@ -14,6 +14,7 @@ processed_ids.json
 processed_ids.json.bak
 diagnostic_report.json
 tmp.db*
+zetta_password.json
 
 # Config with credentials — use config.example.yaml as template
 config.yaml
