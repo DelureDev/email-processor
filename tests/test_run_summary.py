@@ -171,3 +171,92 @@ class TestRunImapModeSummary:
         assert len(summary_lines) == 1
         assert 'status=CRASH' in summary_lines[0]
         assert 'exception=RuntimeError' in summary_lines[0]
+
+
+class TestRunLocalModeSummary:
+    def test_emits_run_summary_on_success(self, tmp_path, monkeypatch, caplog):
+        import main
+        import logging
+        monkeypatch.setattr(main, 'load_existing_keys', lambda p: set())
+
+        empty_folder = tmp_path / 'input'
+        empty_folder.mkdir()
+
+        config = {
+            'output': {'master_file': str(tmp_path / 'master.xlsx')},
+            'processing': {'deduplicate': False},
+            'smtp': {'enabled': False},
+        }
+        caplog.set_level(logging.INFO)
+        main.run_local_mode(str(empty_folder), config, dry_run=True)
+
+        summary_lines = [r.message for r in caplog.records if '[RUN_SUMMARY]' in r.message]
+        assert len(summary_lines) == 1
+        assert 'mode=local' in summary_lines[0]
+        assert 'status=OK' in summary_lines[0]
+        assert 'duration=' in summary_lines[0]
+
+    def test_emits_crash_on_exception(self, tmp_path, monkeypatch, caplog):
+        import main
+        import logging
+
+        def boom(*_args, **_kwargs):
+            raise RuntimeError("deliberate local-mode test failure")
+
+        monkeypatch.setattr(main, 'load_existing_keys', boom)
+
+        empty_folder = tmp_path / 'input'
+        empty_folder.mkdir()
+        config = {
+            'output': {'master_file': str(tmp_path / 'master.xlsx')},
+            'processing': {'deduplicate': True},  # forces load_existing_keys to be called
+            'smtp': {'enabled': False},
+        }
+        caplog.set_level(logging.INFO)
+        with pytest.raises(RuntimeError, match='deliberate'):
+            main.run_local_mode(str(empty_folder), config, dry_run=True)
+
+        summary_lines = [r.message for r in caplog.records if '[RUN_SUMMARY]' in r.message]
+        assert len(summary_lines) == 1
+        assert 'status=CRASH' in summary_lines[0]
+        assert 'exception=RuntimeError' in summary_lines[0]
+        assert 'mode=local' in summary_lines[0]
+
+
+class TestRunTestModeSummary:
+    def test_emits_run_summary(self, tmp_path, caplog):
+        import main
+        import logging
+        empty_folder = tmp_path / 'input'
+        empty_folder.mkdir()
+
+        config = {'processing': {'deduplicate': False}}
+        caplog.set_level(logging.INFO)
+        main.run_test_mode(str(empty_folder), config)
+
+        summary_lines = [r.message for r in caplog.records if '[RUN_SUMMARY]' in r.message]
+        assert len(summary_lines) == 1
+        assert 'mode=test' in summary_lines[0]
+        assert 'duration=' in summary_lines[0]
+
+    def test_emits_crash_on_exception(self, tmp_path, monkeypatch, caplog):
+        import main
+        import logging
+
+        def boom(*_args, **_kwargs):
+            raise RuntimeError("deliberate test-mode failure")
+
+        monkeypatch.setattr(main, '_dedup_xls_xlsx', boom)
+
+        empty_folder = tmp_path / 'input'
+        empty_folder.mkdir()
+        config = {}
+        caplog.set_level(logging.INFO)
+        with pytest.raises(RuntimeError, match='deliberate'):
+            main.run_test_mode(str(empty_folder), config)
+
+        summary_lines = [r.message for r in caplog.records if '[RUN_SUMMARY]' in r.message]
+        assert len(summary_lines) == 1
+        assert 'status=CRASH' in summary_lines[0]
+        assert 'exception=RuntimeError' in summary_lines[0]
+        assert 'mode=test' in summary_lines[0]

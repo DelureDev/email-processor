@@ -638,41 +638,67 @@ def run_local_mode(folder: str, config: dict, dry_run: bool = False):
     """Process files from a local folder."""
     logger = logging.getLogger(__name__)
     stats = make_stats()
+    stats['run_start'] = datetime.now()
     master_path = config.get('output', {}).get('master_file', './output/master.xlsx')
     stats['master_path'] = master_path
 
-    existing_keys = None
-    if config.get('processing', {}).get('deduplicate', True):
-        existing_keys = load_existing_keys(master_path)
-        logger.info(f"Loaded {len(existing_keys)} existing records for dedup")
+    exception_class: str | None = None
+    try:
+        existing_keys = None
+        if config.get('processing', {}).get('deduplicate', True):
+            existing_keys = load_existing_keys(master_path)
+            logger.info(f"Loaded {len(existing_keys)} existing records for dedup")
 
-    files = _dedup_xls_xlsx(
-        glob.glob(os.path.join(folder, '*.xlsx')) + glob.glob(os.path.join(folder, '*.xls'))
-    )
-    logger.info(f"Found {len(files)} files in {folder}")
+        files = _dedup_xls_xlsx(
+            glob.glob(os.path.join(folder, '*.xlsx')) + glob.glob(os.path.join(folder, '*.xls'))
+        )
+        logger.info(f"Found {len(files)} files in {folder}")
 
-    pending = []
-    for filepath in sorted(files):
-        process_file(filepath, master_path, config, stats,
-                    existing_keys=existing_keys, dry_run=dry_run,
-                    pending=pending)
+        pending = []
+        for filepath in sorted(files):
+            process_file(filepath, master_path, config, stats,
+                        existing_keys=existing_keys, dry_run=dry_run,
+                        pending=pending)
 
-    if pending and not dry_run:
-        try:
-            write_batch_to_master(pending, master_path)
-        except Exception as e:
-            logger.error(f"Failed to write batch to master: {e}", exc_info=True)
-            stats['errors'].append(f"Master write failed: {e}")
-            stats['new_records'].clear()
-            stats['total_records'] = 0
+        if pending and not dry_run:
+            try:
+                write_batch_to_master(pending, master_path)
+            except Exception as e:
+                logger.error(f"Failed to write batch to master: {e}", exc_info=True)
+                stats['errors'].append(f"Master write failed: {e}")
+                stats['new_records'].clear()
+                stats['total_records'] = 0
 
-    _print_summary(stats)
+        _print_summary(stats)
 
-    if not dry_run:
-        _export_to_network(config, stats)
-        _attach_monthly_if_last_day(config, stats)
-        from notifier import send_report
-        send_report(config, stats)
+        if not dry_run:
+            try:
+                _export_to_network(config, stats)
+            except Exception as e:
+                logger.error(f"Network export failed: {e}", exc_info=True)
+                stats['errors'].append(f"Network export failed: {e}")
+            try:
+                _attach_monthly_if_last_day(config, stats)
+            except Exception as e:
+                logger.error(f"Monthly attachment failed: {e}", exc_info=True)
+            try:
+                from notifier import send_report
+                send_report(config, stats)
+            except Exception as e:
+                logger.error(f"Notifier failed: {e}", exc_info=True)
+    except Exception as e:
+        exception_class = type(e).__name__
+        raise
+    finally:
+        duration_s = int((datetime.now() - stats['run_start']).total_seconds())
+        status = 'CRASH' if exception_class else compute_status(stats)
+        logger.info(build_run_summary(
+            stats,
+            status=status,
+            duration_s=duration_s,
+            mode='local',
+            exception_class=exception_class,
+        ))
 
     return stats
 
@@ -683,69 +709,88 @@ def run_test_mode(folder: str, config: dict):
     if sys.stdout.encoding and sys.stdout.encoding.lower().replace('-', '') != 'utf8':
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     logger = logging.getLogger(__name__)
-    files = _dedup_xls_xlsx(
-        glob.glob(os.path.join(folder, '*.xlsx')) + glob.glob(os.path.join(folder, '*.xls'))
-    )
-    print(f"\n{'='*70}")
-    print(f"TEST MODE - {len(files)} files found")
-    print(f"{'='*70}\n")
 
-    total = 0
-    for filepath in sorted(files):
-        filename = os.path.basename(filepath)
+    stats = make_stats()
+    stats['run_start'] = datetime.now()
 
-        if should_skip_file(filename, config):
-            print(f"[SKIP] {filename}")
-            continue
+    exception_class: str | None = None
+    try:
+        files = _dedup_xls_xlsx(
+            glob.glob(os.path.join(folder, '*.xlsx')) + glob.glob(os.path.join(folder, '*.xls'))
+        )
+        print(f"\n{'='*70}")
+        print(f"TEST MODE - {len(files)} files found")
+        print(f"{'='*70}\n")
 
-        if filepath.lower().endswith('.xls'):
-            converted = convert_xls_to_xlsx(filepath)
-            if converted is None:
-                print(f"[ERR]  CONVERT FAILED: {filename}")
+        total = 0
+        for filepath in sorted(files):
+            filename = os.path.basename(filepath)
+
+            if should_skip_file(filename, config):
+                print(f"[SKIP] {filename}")
                 continue
-            filepath = converted
 
-        fmt = detect_format(filepath)
-        if fmt is None:
-            print(f"[ERR]  UNKNOWN: {filename}")
-            continue
+            if filepath.lower().endswith('.xls'):
+                converted = convert_xls_to_xlsx(filepath)
+                if converted is None:
+                    print(f"[ERR]  CONVERT FAILED: {filename}")
+                    continue
+                filepath = converted
 
-        parser_fn = PARSERS.get(fmt)
-        if not parser_fn:
-            print(f"[ERR]  NO PARSER ({fmt}): {filename}")
-            continue
+            fmt = detect_format(filepath)
+            if fmt is None:
+                print(f"[ERR]  UNKNOWN: {filename}")
+                continue
 
-        try:
-            records = parser_fn(filepath)
-        except Exception as e:
-            print(f"[ERR]  ERROR: {filename} -- {e}")
-            continue
+            parser_fn = PARSERS.get(fmt)
+            if not parser_fn:
+                print(f"[ERR]  NO PARSER ({fmt}): {filename}")
+                continue
 
-        if not records:
-            print(f"[---]  EMPTY: {filename} (format: {fmt})")
-            continue
+            try:
+                records = parser_fn(filepath)
+            except Exception as e:
+                print(f"[ERR]  ERROR: {filename} -- {e}")
+                continue
 
-        clinic, need_comment, clinic_id = detect_clinic(filepath)
-        comment = extract_policy_comment(filepath) if need_comment else ''
-        total += len(records)
-        print(f"[OK]  {fmt.upper():12s} | {len(records):3d} records | {filename} | clinic: {clinic}")
-        if comment:
-            print(f"   comment: {comment[:80]}")
-        elif need_comment:
-            print(f"   comment: (!) ne najden (extract_comment=true)")
-        for r in records[:3]:  # show first 3
-            fio = (r.get('ФИО') or '')[:35]
-            polis = (r.get('№ полиса') or '')[:20]
-            start = r.get('Начало обслуживания') or ''
-            end = r.get('Конец обслуживания') or ''
-            company = r.get('Страховая компания') or ''
-            print(f"   > {fio:35s} | {polis:20s} | {start:10s}-{end:10s} | {company}")
-        if len(records) > 3:
-            print(f"   ... and {len(records) - 3} more")
+            if not records:
+                print(f"[---]  EMPTY: {filename} (format: {fmt})")
+                continue
 
-    print(f"\n{'='*70}")
-    print(f"TOTAL: {total} records from {len(files)} files")
-    print(f"{'='*70}\n")
+            clinic, need_comment, clinic_id = detect_clinic(filepath)
+            comment = extract_policy_comment(filepath) if need_comment else ''
+            total += len(records)
+            print(f"[OK]  {fmt.upper():12s} | {len(records):3d} records | {filename} | clinic: {clinic}")
+            if comment:
+                print(f"   comment: {comment[:80]}")
+            elif need_comment:
+                print(f"   comment: (!) ne najden (extract_comment=true)")
+            for r in records[:3]:  # show first 3
+                fio = (r.get('ФИО') or '')[:35]
+                polis = (r.get('№ полиса') or '')[:20]
+                start = r.get('Начало обслуживания') or ''
+                end = r.get('Конец обслуживания') or ''
+                company = r.get('Страховая компания') or ''
+                print(f"   > {fio:35s} | {polis:20s} | {start:10s}-{end:10s} | {company}")
+            if len(records) > 3:
+                print(f"   ... and {len(records) - 3} more")
+
+        print(f"\n{'='*70}")
+        print(f"TOTAL: {total} records from {len(files)} files")
+        print(f"{'='*70}\n")
+    except Exception as e:
+        exception_class = type(e).__name__
+        raise
+    finally:
+        duration_s = int((datetime.now() - stats['run_start']).total_seconds())
+        status = 'CRASH' if exception_class else compute_status(stats)
+        logger.info(build_run_summary(
+            stats,
+            status=status,
+            duration_s=duration_s,
+            mode='test',
+            exception_class=exception_class,
+        ))
 
 
 def _print_summary(stats: dict) -> None:
