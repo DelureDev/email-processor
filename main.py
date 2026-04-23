@@ -742,6 +742,20 @@ def _print_summary(stats: dict) -> None:
 
 
 if __name__ == '__main__':
+    if sys.platform != 'win32':
+        import errno
+        import fcntl
+        _LOCK_PATH = './logs/main.lock'
+        os.makedirs(os.path.dirname(_LOCK_PATH), exist_ok=True)
+        _lock_fh = open(_LOCK_PATH, 'w')
+        try:
+            fcntl.flock(_lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as e:
+            if e.errno in (errno.EACCES, errno.EAGAIN):
+                print("Another instance of main.py is already running (./logs/main.lock). Exiting.")
+                sys.exit(0)
+            raise
+
     parser = argparse.ArgumentParser(
         description='Email → XLSX Processor — extracts insurance data into master spreadsheet',
         formatter_class=argparse.RawTextHelpFormatter,
