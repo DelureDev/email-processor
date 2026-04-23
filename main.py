@@ -62,16 +62,23 @@ def setup_logging(config: dict) -> None:
 
 
 def _expand_env(obj):
-    """Recursively expand ${VAR_NAME} placeholders in config values."""
+    """Recursively expand ${VAR_NAME} placeholders in config values.
+
+    Raises ValueError if any referenced env var is unset.
+    """
     if isinstance(obj, str):
+        unresolved = []
         def _replace(m):
             name = m.group(1)
             val = os.environ.get(name)
             if val is None:
-                logging.getLogger(__name__).warning(f"Environment variable ${{{name}}} is not set — using literal placeholder")
+                unresolved.append(name)
                 return m.group(0)
             return val
-        return re.sub(r'\$\{(\w+)\}', _replace, obj)
+        result = re.sub(r'\$\{(\w+)\}', _replace, obj)
+        if unresolved:
+            raise ValueError(f"Unresolved environment variable(s): {', '.join(unresolved)}")
+        return result
     if isinstance(obj, dict):
         return {k: _expand_env(v) for k, v in obj.items()}
     if isinstance(obj, list):
