@@ -68,3 +68,45 @@ class TestExportToNetwork:
             _export_to_network(config, stats)
         err_text = ' '.join(stats['errors'])
         assert 'timed out' in err_text.lower() or 'reachable' in err_text.lower()
+
+
+def test_network_status_skip_when_no_folder(tmp_path):
+    """network_status stays SKIP when csv_export_folder is empty."""
+    from main import _export_to_network, make_stats
+    config = {'output': {'csv_export_folder': ''}}
+    stats = make_stats()
+    _export_to_network(config, stats)
+    assert stats['network_status'] == 'SKIP'
+
+
+def test_network_status_ok_on_successful_export(tmp_path):
+    """network_status is OK after daily + monthly writes succeed."""
+    from main import _export_to_network, make_stats
+    config = {'output': {'csv_export_folder': str(tmp_path), 'network_timeout': 10}}
+    stats = make_stats()
+    stats['new_records'] = [{
+        'ФИО': 'ТЕСТ', 'Дата рождения': '01.01.1990', '№ полиса': 'P1',
+        'Начало обслуживания': '01.01.2026', 'Конец обслуживания': '31.12.2026',
+        'Страховая компания': 'СК', 'Страхователь': 'ООО',
+        'Клиника': 'К1', 'Комментарий в полис': '',
+        'Источник файла': 'a.xlsx', 'Дата обработки': '23.04.2026',
+    }]
+    _export_to_network(config, stats)
+    assert stats['network_status'] == 'OK'
+
+
+def test_network_status_fail_on_unreachable_folder(tmp_path):
+    """network_status is FAIL when folder doesn't exist."""
+    from main import _export_to_network, make_stats
+    unreachable = tmp_path / 'does' / 'not' / 'exist'
+    config = {'output': {'csv_export_folder': str(unreachable), 'network_timeout': 2}}
+    stats = make_stats()
+    stats['new_records'] = [{
+        'ФИО': 'T', 'Дата рождения': '', '№ полиса': 'P',
+        'Начало обслуживания': '', 'Конец обслуживания': '',
+        'Страховая компания': '', 'Страхователь': '',
+        'Клиника': '', 'Комментарий в полис': '',
+        'Источник файла': 'a.xlsx', 'Дата обработки': '23.04.2026',
+    }]
+    _export_to_network(config, stats)
+    assert stats['network_status'] == 'FAIL'

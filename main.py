@@ -381,10 +381,12 @@ def _export_to_network(config: dict, stats: dict) -> None:
         except concurrent.futures.TimeoutError:
             logger.error(f"Network share not reachable (timed out after {timeout_sec}s): {folder}")
             stats['errors'].append(f"Network share timed out: {folder}")
+            stats['network_status'] = 'FAIL'
             return
         if not reachable:
             logger.error(f"Network share folder does not exist: {folder}")
             stats['errors'].append(f"Network share not found: {folder}")
+            stats['network_status'] = 'FAIL'
             return
 
     import csv
@@ -446,6 +448,7 @@ def _export_to_network(config: dict, stats: dict) -> None:
     except Exception as e:
         logger.error(f"Failed to export daily CSV to network: {e}")
         stats['errors'].append(f"Network daily CSV failed: {e}")
+        stats['network_status'] = 'FAIL'
 
     # 2. Monthly master — append to current month file, new file each month
     month_str = now.strftime('%Y-%m')
@@ -464,6 +467,11 @@ def _export_to_network(config: dict, stats: dict) -> None:
     except Exception as e:
         logger.error(f"Failed to export monthly CSV to network: {e}")
         stats['errors'].append(f"Network monthly CSV failed: {e}")
+        stats['network_status'] = 'FAIL'
+
+    # If we got here without setting FAIL and both writes were attempted, mark OK.
+    if stats.get('network_status') != 'FAIL':
+        stats['network_status'] = 'OK'
 
 
 def _ping_healthcheck(config: dict, stats: dict) -> None:
