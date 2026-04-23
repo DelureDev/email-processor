@@ -85,10 +85,17 @@ def _safe_fetch_rfc822(mail, uid_str: str, attempts: int = 3, delay: float = 2.0
     """FETCH RFC822 for a UID with retry + expunged-UID guard.
 
     Returns the raw message bytes, or None if the UID is no longer available
-    (expunged between SEARCH and FETCH, or flags-only response).
+    (expunged between SEARCH and FETCH, flags-only response, or transport
+    errors that don't recover).
     """
     for attempt in range(1, attempts + 1):
-        status, data = mail.uid('FETCH', uid_str, '(RFC822)')
+        try:
+            status, data = mail.uid('FETCH', uid_str, '(RFC822)')
+        except (imaplib.IMAP4.abort, ssl.SSLError, OSError) as e:
+            logger.warning(f"IMAP transport error on FETCH uid={uid_str} attempt {attempt}: {e}")
+            if attempt < attempts:
+                time.sleep(delay)
+            continue
         if status != 'OK':
             if attempt < attempts:
                 time.sleep(delay)
@@ -395,24 +402,11 @@ class IMAPFetcher:
           try:
             msg_id_str = uid.decode()
 
-            msg_data = None
-            for attempt in range(1, 4):
-                status, data = self.mail.uid('FETCH', uid.decode(), '(RFC822)')
-                if status == 'OK':
-                    msg_data = data
-                    break
-                logger.warning(f"Fetch attempt {attempt} failed for UID {msg_id_str}, retrying...")
-                time.sleep(2)
-            if msg_data is None:
-                logger.error(f"Skipping message {msg_id_str} after 3 failed fetch attempts")
+            raw = _safe_fetch_rfc822(self.mail, uid.decode())
+            if raw is None:
+                logger.error(f"Skipping message {msg_id_str} — FETCH failed after retries")
                 continue
-
-            # Guard against malformed FETCH response
-            if not msg_data or not isinstance(msg_data[0], tuple) or len(msg_data[0]) < 2:
-                logger.error(f"Malformed FETCH response for UID {msg_id_str}, skipping")
-                continue
-
-            msg = email.message_from_bytes(msg_data[0][1])
+            msg = email.message_from_bytes(raw)
             message_id = msg.get('Message-ID', msg_id_str)
 
             if message_id in self.processed_ids:

@@ -244,3 +244,45 @@ def test_main_loop_monthly_password_also_saves_to_cache(tmp_path, monkeypatch):
     loaded = zetta_password_cache.load(str(cache_path))
     assert loaded is not None
     assert loaded['password'] == 'mainloop-pw'
+
+
+def test_safe_fetch_retries_on_imap_abort():
+    """Transport-level exceptions should trigger retry, not propagate."""
+    import imaplib
+    from unittest.mock import MagicMock
+    from fetcher import _safe_fetch_rfc822
+    mail = MagicMock()
+    mail.uid = MagicMock(side_effect=[
+        imaplib.IMAP4.abort("connection dropped"),
+        ('OK', [(b'h', b'ok-body')]),
+    ])
+    result = _safe_fetch_rfc822(mail, '42', attempts=3, delay=0)
+    assert result == b'ok-body'
+    assert mail.uid.call_count == 2
+
+
+def test_safe_fetch_retries_on_ssl_error():
+    """ssl.SSLError should trigger retry."""
+    import ssl
+    from unittest.mock import MagicMock
+    from fetcher import _safe_fetch_rfc822
+    mail = MagicMock()
+    mail.uid = MagicMock(side_effect=[
+        ssl.SSLError("renegotiation failed"),
+        ('OK', [(b'h', b'ok-body')]),
+    ])
+    result = _safe_fetch_rfc822(mail, '42', attempts=3, delay=0)
+    assert result == b'ok-body'
+    assert mail.uid.call_count == 2
+
+
+def test_safe_fetch_all_transport_errors_returns_none():
+    """If every attempt raises, return None gracefully."""
+    import imaplib
+    from unittest.mock import MagicMock
+    from fetcher import _safe_fetch_rfc822
+    mail = MagicMock()
+    mail.uid = MagicMock(side_effect=imaplib.IMAP4.abort("persistent"))
+    result = _safe_fetch_rfc822(mail, '42', attempts=3, delay=0)
+    assert result is None
+    assert mail.uid.call_count == 3
