@@ -14,6 +14,7 @@ import logging
 import re
 
 from parsers.utils import format_date, find_header_row, build_header_map, find_col, first_col, get_cell_str, assemble_fio
+from parsers.errors import HeaderNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +41,7 @@ def parse(filepath: str) -> list[dict]:
 
     header_row = find_header_row(df, ('фамилия', 'полис'), max_rows=20)
     if header_row is None:
-        logger.error(f"INGOS: Could not find header row in {filepath}")
-        return []
+        raise HeaderNotFoundError("INGOS: could not find header row")
 
     headers = build_header_map(df, header_row)
     col_familia = find_col(headers, 'фамилия')
@@ -53,8 +53,7 @@ def parse(filepath: str) -> list[dict]:
     col_otkr = find_col(headers, 'дата', 'откреплен')
 
     if col_familia is None:
-        logger.error(f"INGOS: Could not find 'Фамилия' column in {filepath}")
-        return []
+        raise HeaderNotFoundError("INGOS: could not find 'Фамилия' column")
 
     for i in range(header_row + 1, len(df)):
         try:

@@ -28,6 +28,7 @@ from functools import lru_cache
 
 from detector import detect_format
 from parsers import PARSERS
+from parsers.errors import HeaderNotFoundError
 from parsers.utils import record_key, clean_dedup_val, norm_date_pad
 from writer import write_to_master, write_batch_to_master, load_existing_keys
 from clinic_matcher import detect_clinic, extract_policy_comment
@@ -222,6 +223,11 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
     # Parse
     try:
         records = parser_fn(filepath)
+    except HeaderNotFoundError as e:
+        logger.error(f"Header not found in {filename}: {e}")
+        stats['errors'].append(f"Header not found in {filename}: {e}")
+        _quarantine(filepath, config)
+        return 0
     except Exception as e:
         logger.error(f"Parse error in {filename}: {e}", exc_info=True)
         stats['errors'].append(f"Parse error: {filename} ({e})")

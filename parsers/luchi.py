@@ -12,6 +12,7 @@ import pandas as pd
 import logging
 
 from parsers.utils import format_date, find_header_row, build_header_map, find_col, get_cell_str, assemble_fio
+from parsers.errors import HeaderNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +24,7 @@ def parse(filepath: str) -> list[dict]:
 
     header_row = find_header_row(df, ('фамилия', 'полис'), max_rows=25)
     if header_row is None:
-        logger.error(f"LUCHI: Could not find header row in {filepath}")
-        return []
+        raise HeaderNotFoundError("LUCHI: could not find header row")
 
     headers = build_header_map(df, header_row)
     col_familia = find_col(headers, 'фамилия')
@@ -37,8 +37,7 @@ def parse(filepath: str) -> list[dict]:
     col_work = find_col(headers, 'место', 'работ')
 
     if col_familia is None:
-        logger.error(f"LUCHI: Could not find 'Фамилия' column in {filepath}")
-        return []
+        raise HeaderNotFoundError("LUCHI: could not find 'Фамилия' column")
 
     for i in range(header_row + 1, len(df)):
         try:
