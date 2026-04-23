@@ -244,9 +244,24 @@ class IMAPFetcher:
         zetta_zip_message_ids = set()  # message_ids for zip emails — marked processed only after extraction
 
         # Pre-scan: search for Zetta monthly password (go back 35 days to catch 1st-of-month email)
+        # Searches both INBOX and processed_folder — email may have been moved by a prior run
         pwd_since = _imap_date(datetime.now() - timedelta(days=35))
-        status, pwd_msgs = self.mail.uid('SEARCH', None, f'(SINCE {pwd_since} FROM "parollpu@zettains.ru")')
-        if status == 'OK' and pwd_msgs[0]:
+        processed_folder = config.get('imap', {}).get('processed_folder', '').strip()
+        pwd_search_folders = [self.folder]
+        if processed_folder and processed_folder != self.folder:
+            pwd_search_folders.append(processed_folder)
+
+        for pwd_folder in pwd_search_folders:
+            try:
+                self.mail.select(pwd_folder)
+            except Exception as e:
+                logger.debug(f"Cannot select folder {pwd_folder} for password scan: {e}")
+                continue
+            status, pwd_msgs = self.mail.uid('SEARCH', None, f'(SINCE {pwd_since} FROM "parollpu@zettains.ru")')
+            if status != 'OK' or not pwd_msgs[0]:
+                logger.debug(f"No Zetta monthly password email found in {pwd_folder}")
+                continue
+            logger.info(f"Found {len(pwd_msgs[0].split())} Zetta monthly password email(s) in {pwd_folder}")
             for uid in pwd_msgs[0].split():
                 try:
                     msg_data = None
@@ -266,9 +281,19 @@ class IMAPFetcher:
                             zetta_passwords.insert(0, monthly['password'])
                             logger.info(f"Got Zetta monthly password (valid {monthly['valid_from']} - {monthly['valid_to']})")
                         self.processed_ids.add(message_id)
+                    else:
+                        logger.warning(f"Zetta monthly password email found in {pwd_folder} but could not extract password — format may have changed")
                     # If extraction returned None — do NOT mark processed, retry next run
                 except Exception as e:
                     logger.debug(f"Error reading password email: {e}")
+            if zetta_passwords:
+                break  # found password, no need to check other folders
+
+        if not zetta_passwords:
+            logger.warning("Zetta monthly password not found in any folder — zips will fail if no per-email passwords arrive")
+
+        # Restore main folder selection
+        self.mail.select(self.folder)
 
         # Main search for recent emails
         since_date = _imap_date(datetime.now() - timedelta(days=days_back))
