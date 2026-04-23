@@ -32,6 +32,37 @@ def _extract_email_addr(from_header: str) -> str:
     return addr.lower()
 
 
+def imap_utf7_encode(name: str) -> str:
+    """Encode a folder name using IMAP modified UTF-7 (RFC 3501).
+
+    Required for non-ASCII folder names (e.g. Cyrillic) because imaplib
+    defaults to ASCII encoding and raises UnicodeEncodeError otherwise.
+    Modified UTF-7 uses ',' instead of '/' in its base64 alphabet.
+    """
+    import base64
+    result = []
+    buf = []
+    for c in name:
+        if 0x20 <= ord(c) <= 0x7e and c != '&':
+            if buf:
+                b64 = base64.b64encode(''.join(buf).encode('utf-16-be')).decode('ascii').rstrip('=').replace('/', ',')
+                result.append('&' + b64 + '-')
+                buf = []
+            result.append(c)
+        elif c == '&':
+            if buf:
+                b64 = base64.b64encode(''.join(buf).encode('utf-16-be')).decode('ascii').rstrip('=').replace('/', ',')
+                result.append('&' + b64 + '-')
+                buf = []
+            result.append('&-')
+        else:
+            buf.append(c)
+    if buf:
+        b64 = base64.b64encode(''.join(buf).encode('utf-16-be')).decode('ascii').rstrip('=').replace('/', ',')
+        result.append('&' + b64 + '-')
+    return ''.join(result)
+
+
 def decode_mime_header(header_value: str | None) -> str:
     """Decode MIME encoded header (supports Russian encodings)."""
     if not header_value:
@@ -146,7 +177,7 @@ class IMAPFetcher:
             try:
                 self.mail = imaplib.IMAP4_SSL(self.server, self.port, ssl_context=ssl.create_default_context(), timeout=60)
                 self.mail.login(self.username, self.password)
-                self.mail.select(self.folder)
+                self.mail.select(imap_utf7_encode(self.folder))
                 logger.info("Connected successfully")
                 return
             except Exception as e:
@@ -253,7 +284,7 @@ class IMAPFetcher:
 
         for pwd_folder in pwd_search_folders:
             try:
-                self.mail.select(pwd_folder)
+                self.mail.select(imap_utf7_encode(pwd_folder))
             except Exception as e:
                 logger.debug(f"Cannot select folder {pwd_folder} for password scan: {e}")
                 continue
@@ -293,7 +324,7 @@ class IMAPFetcher:
             logger.warning("Zetta monthly password not found in any folder — zips will fail if no per-email passwords arrive")
 
         # Restore main folder selection
-        self.mail.select(self.folder)
+        self.mail.select(imap_utf7_encode(self.folder))
 
         # Main search for recent emails
         since_date = _imap_date(datetime.now() - timedelta(days=days_back))

@@ -4,6 +4,7 @@ import ssl
 import os
 import email
 import re
+import time
 import yaml
 from datetime import datetime, timedelta
 
@@ -15,9 +16,9 @@ ctx = ssl.create_default_context()
 m = imaplib.IMAP4_SSL(imap_cfg['server'], imap_cfg.get('port', 993), ssl_context=ctx)
 m.login(imap_cfg['username'], pwd)
 
+from fetcher import imap_utf7_encode
 from zetta_handler import extract_monthly_password
 
-# Check both INBOX and processed folder
 folders_to_check = ['INBOX']
 processed = imap_cfg.get('processed_folder', '')
 if processed:
@@ -28,17 +29,26 @@ since_date = (datetime.now() - timedelta(days=35)).strftime('%d-%b-%Y')
 found_any = False
 for folder in folders_to_check:
     print(f"\n=== Searching in: {folder} ===")
-    typ, _ = m.select(f'"{folder}"')
+    encoded = imap_utf7_encode(folder)
+    typ, _ = m.select(encoded)
     if typ != 'OK':
         print(f"  Could not select folder: {typ}")
         continue
 
-    typ, msgs = m.uid('SEARCH', None, f'SINCE {since_date} FROM "parollpu@zettains.ru"')
-    if typ != 'OK':
-        print(f"  SEARCH error: {typ} {msgs}")
+    # Retry SEARCH up to 3 times — some servers return [UNAVAILABLE] transiently
+    uids = []
+    for attempt in range(1, 4):
+        typ, msgs = m.uid('SEARCH', None, f'SINCE {since_date} FROM "parollpu@zettains.ru"')
+        if typ == 'OK':
+            uids = msgs[0].split() if msgs[0] else []
+            break
+        print(f"  SEARCH attempt {attempt} failed: {msgs[0]}")
+        if attempt < 3:
+            time.sleep(3)
+    else:
+        print("  SEARCH failed after 3 attempts, skipping folder")
         continue
 
-    uids = msgs[0].split() if msgs[0] else []
     print(f"  Found {len(uids)} email(s) since {since_date}")
     if not uids:
         continue
@@ -68,7 +78,7 @@ for folder in folders_to_check:
                         found_any = True
                     else:
                         print("  [EXTRACTION FAILED] extract_monthly_password returned None")
-            break  # stop after first successful fetch per folder
+            break
         except Exception as e:
             print(f"  ERROR fetching UID {uid_str}: {e}")
             continue
