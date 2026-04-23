@@ -18,6 +18,7 @@ zetta_password.json
 
 # Config with credentials — use config.example.yaml as template
 config.yaml
+.env
 
 # IDE
 .vscode/
