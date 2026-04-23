@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.10.12] - 2026-04-24
+### Added
+- **`RUN_SUMMARY` log line**: every pipeline run now ends with a single structured INFO line `[RUN_SUMMARY] status=OK|FAIL|CRASH mode=imap|local|test files=N records=N errors=N unknown=N skip_rule=N clinic_miss=N smtp=OK|FAIL|SKIP network=OK|FAIL|SKIP duration=Ns [exception=ClassName]`. Emitted from a `try/finally` so crashes produce a line too. VM triage becomes `grep RUN_SUMMARY logs/processor.log | tail -10` — missing entries signal a dead cron.
+- **Email log tail on failure**: when the report email has `has_problems=True`, a collapsible `<details>` block is appended containing the last log lines from this run (filtered by `stats['run_start']`, capped at 20 KB, HTML-escaped). Lets you triage from phone without SSH.
+- `stats['smtp_status']` / `stats['network_status']` — `OK`/`FAIL`/`SKIP` markers fed into `RUN_SUMMARY`.
+- `run_summary.py` module with `build_run_summary()` + `compute_status()` pure functions.
+- `tests/test_run_summary.py` — 17 tests covering summary format, compute_status, and integration with all 3 run modes (imap/local/test) including CRASH paths.
+- `tests/test_log_level_invariant.py` — asserts clean runs produce zero ERROR-level log lines.
+
+### Changed
+- Log-level audit: walked every `logger.error` / `logger.warning` call site. Level now aligns with `stats['errors']` — i.e. `grep ERROR processor.log` returns exactly the set of events worth acting on. Upgraded `main.py:252` (empty dates) and `main.py:502` (healthcheck ping failed) and `writer.py:180` (CSV backup failed) from `warning` to `error`.
+- `notifier.send_report` now sets `stats['smtp_status'] = 'OK'` / `'FAIL'` alongside the existing `stats['errors']` append.
+- `main._export_to_network` now sets `stats['network_status']` on every exit branch (timeout, unreachable, daily fail, monthly fail, success).
+- `run_local_mode` post-body calls (`_export_to_network`, `_attach_monthly_if_last_day`, `send_report`) now wrapped individually in `try/except` matching the `run_imap_mode` pattern — a single post-write failure no longer trips the outer CRASH handler.
+
+### Fixed
+- `writer._append_to_existing` CSV backup failure is now `logger.error` (not warning) — previously silent divergence between master.xlsx and master.csv. Appending to `stats['errors']` deferred pending a signature refactor (inline TODO).
+
 ## [1.10.11] - 2026-04-23
 ### Fixed
 - **C1 — Healthcheck honesty**: `notifier.send_report` now appends `"SMTP send failed: ..."` to `stats['errors']` on any SMTP exception, so `_ping_healthcheck` correctly flips to `/fail`. Previously SMTP failures were logged only, leaving healthcheck green while reports silently stopped.
