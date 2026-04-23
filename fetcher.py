@@ -289,8 +289,15 @@ class IMAPFetcher:
             except Exception as e:
                 logger.debug(f"Cannot select folder {pwd_folder} for password scan: {e}")
                 continue
-            status, pwd_msgs = self.mail.uid('SEARCH', None, f'(SINCE {pwd_since} FROM "parollpu@zettains.ru")')
-            if status != 'OK' or not pwd_msgs[0]:
+            pwd_msgs = None
+            for _attempt in range(1, 4):
+                status, _data = self.mail.uid('SEARCH', None, f'(SINCE {pwd_since} FROM "parollpu@zettains.ru")')
+                if status == 'OK':
+                    pwd_msgs = _data
+                    break
+                logger.warning(f"Zetta password SEARCH in {pwd_folder} attempt {_attempt} failed ({status}), retrying...")
+                time.sleep(3)
+            if pwd_msgs is None or not pwd_msgs[0]:
                 logger.debug(f"No Zetta monthly password email found in {pwd_folder}")
                 continue
             logger.info(f"Found {len(pwd_msgs[0].split())} Zetta monthly password email(s) in {pwd_folder}")
