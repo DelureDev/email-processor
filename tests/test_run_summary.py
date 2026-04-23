@@ -101,3 +101,73 @@ class TestComputeStatus:
 
     def test_fail_on_missing_comments(self):
         assert compute_status(_stats(missing_comments=['x.xlsx'])) == 'FAIL'
+
+
+class TestRunImapModeSummary:
+    """Integration: run_imap_mode emits RUN_SUMMARY in finally block."""
+
+    def test_emits_run_summary_on_success(self, tmp_path, monkeypatch, caplog):
+        import main
+        import logging
+        import fetcher as fetcher_module
+
+        class FakeFetcher:
+            def __init__(self, config, dry_run=False):
+                self.failed_zips = []
+            def connect(self): pass
+            def fetch_attachments(self, days_back=7): return []
+            def close(self): pass
+            def disconnect(self): pass
+            def move_to_folder(self, *a, **kw): pass
+            def _save_processed_ids(self): pass
+
+        monkeypatch.setattr(fetcher_module, 'IMAPFetcher', FakeFetcher)
+        monkeypatch.setattr(main, 'load_existing_keys', lambda p: set())
+        monkeypatch.setattr(main, '_ping_healthcheck', lambda c, s: None)
+
+        config = {
+            'output': {'master_file': str(tmp_path / 'master.xlsx')},
+            'imap': {'days_back': 1},
+            'processing': {'deduplicate': False},
+            'smtp': {'enabled': False},
+        }
+        caplog.set_level(logging.INFO)
+        main.run_imap_mode(config, dry_run=True)
+
+        summary_lines = [r.message for r in caplog.records if '[RUN_SUMMARY]' in r.message]
+        assert len(summary_lines) == 1
+        assert 'status=OK' in summary_lines[0]
+        assert 'mode=imap' in summary_lines[0]
+        # NEW assertions — ensure spec-required fields are present:
+        assert 'smtp=' in summary_lines[0]
+        assert 'network=' in summary_lines[0]
+        assert 'duration=' in summary_lines[0]
+
+    def test_emits_crash_on_exception(self, tmp_path, monkeypatch, caplog):
+        import main
+        import logging
+        import fetcher as fetcher_module
+
+        class BoomFetcher:
+            def __init__(self, config, dry_run=False):
+                raise RuntimeError("deliberate test failure")
+            def connect(self): pass
+
+        monkeypatch.setattr(fetcher_module, 'IMAPFetcher', BoomFetcher)
+        monkeypatch.setattr(main, 'load_existing_keys', lambda p: set())
+        monkeypatch.setattr(main, '_ping_healthcheck', lambda c, s: None)
+
+        config = {
+            'output': {'master_file': str(tmp_path / 'master.xlsx')},
+            'imap': {'days_back': 1},
+            'processing': {'deduplicate': False},
+            'smtp': {'enabled': False},
+        }
+        caplog.set_level(logging.INFO)
+        with pytest.raises(RuntimeError, match='deliberate'):
+            main.run_imap_mode(config, dry_run=True)
+
+        summary_lines = [r.message for r in caplog.records if '[RUN_SUMMARY]' in r.message]
+        assert len(summary_lines) == 1
+        assert 'status=CRASH' in summary_lines[0]
+        assert 'exception=RuntimeError' in summary_lines[0]

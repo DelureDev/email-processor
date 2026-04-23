@@ -32,6 +32,7 @@ from parsers.errors import HeaderNotFoundError
 from parsers.utils import record_key, clean_dedup_val, norm_date_pad
 from writer import write_to_master, write_batch_to_master, load_existing_keys
 from clinic_matcher import detect_clinic, extract_policy_comment
+from run_summary import build_run_summary, compute_status
 
 
 def setup_logging(config: dict) -> None:
@@ -501,117 +502,134 @@ def run_imap_mode(config: dict, dry_run: bool = False):
     from fetcher import IMAPFetcher
 
     stats = make_stats()
+    stats['run_start'] = datetime.now()
     master_path = config.get('output', {}).get('master_file', './output/master.xlsx')
     stats['master_path'] = master_path
 
-    # Load existing records for dedup
-    existing_keys = None
-    if config.get('processing', {}).get('deduplicate', True):
-        existing_keys = load_existing_keys(master_path)
-        logger.info(f"Loaded {len(existing_keys)} existing records for dedup")
-
-    fetcher = IMAPFetcher(config, dry_run=dry_run)
-    pending = []
-    processed_imap_ids = []
-    # Track all Zetta extract dirs up front so we can clean them in finally,
-    # even if process_file throws mid-loop (otherwise dirs for later files in
-    # the same zip would leak because only the last att carries _extract_dir).
-    extract_dirs_to_clean: set[str] = set()
+    exception_class: str | None = None
     try:
-        fetcher.connect()
-        days_back = config.get('imap', {}).get('days_back', 7)
-        attachments = fetcher.fetch_attachments(days_back=days_back)
-        for att in attachments:
-            if att.get('_extract_dir'):
-                extract_dirs_to_clean.add(att['_extract_dir'])
+        # Load existing records for dedup
+        existing_keys = None
+        if config.get('processing', {}).get('deduplicate', True):
+            existing_keys = load_existing_keys(master_path)
+            logger.info(f"Loaded {len(existing_keys)} existing records for dedup")
 
-        for att in attachments:
-            process_file(att['filepath'], master_path, config, stats,
-                        sender=att.get('sender', ''),
-                        subject=att.get('subject', ''),
-                        existing_keys=existing_keys, dry_run=dry_run,
-                        pending=pending)
-            # Always mark email as processed — dedup handles duplicates,
-            # no need to re-download and re-parse the same attachment every run
-            if att.get('imap_id'):
-                processed_imap_ids.append(att['imap_id'])
-            try:
-                os.remove(att['filepath'])
-            except OSError:
-                pass
-            # Clean up converted .xlsx if original was .xls
-            if att['filepath'].lower().endswith('.xls'):
+        fetcher = IMAPFetcher(config, dry_run=dry_run)
+        pending = []
+        processed_imap_ids = []
+        # Track all Zetta extract dirs up front so we can clean them in finally,
+        # even if process_file throws mid-loop (otherwise dirs for later files in
+        # the same zip would leak because only the last att carries _extract_dir).
+        extract_dirs_to_clean: set[str] = set()
+        try:
+            fetcher.connect()
+            days_back = config.get('imap', {}).get('days_back', 7)
+            attachments = fetcher.fetch_attachments(days_back=days_back)
+            for att in attachments:
+                if att.get('_extract_dir'):
+                    extract_dirs_to_clean.add(att['_extract_dir'])
+
+            for att in attachments:
+                process_file(att['filepath'], master_path, config, stats,
+                            sender=att.get('sender', ''),
+                            subject=att.get('subject', ''),
+                            existing_keys=existing_keys, dry_run=dry_run,
+                            pending=pending)
+                # Always mark email as processed — dedup handles duplicates,
+                # no need to re-download and re-parse the same attachment every run
+                if att.get('imap_id'):
+                    processed_imap_ids.append(att['imap_id'])
                 try:
-                    os.remove(os.path.splitext(att['filepath'])[0] + '.xlsx')
+                    os.remove(att['filepath'])
                 except OSError:
                     pass
-    except Exception as e:
-        logger.error(f"IMAP error: {e}", exc_info=True)
-        stats['errors'].append(f"IMAP error: {e}")
-    finally:
-        # Clean up every Zetta extract dir we collected, regardless of how we exited
-        for extract_dir in extract_dirs_to_clean:
+                # Clean up converted .xlsx if original was .xls
+                if att['filepath'].lower().endswith('.xls'):
+                    try:
+                        os.remove(os.path.splitext(att['filepath'])[0] + '.xlsx')
+                    except OSError:
+                        pass
+        except Exception as e:
+            logger.error(f"IMAP error: {e}", exc_info=True)
+            stats['errors'].append(f"IMAP error: {e}")
+        finally:
+            # Clean up every Zetta extract dir we collected, regardless of how we exited
+            for extract_dir in extract_dirs_to_clean:
+                try:
+                    shutil.rmtree(extract_dir, ignore_errors=True)
+                except OSError:
+                    pass
+
+        # Surface Zetta zip failures in email report
+        if fetcher.failed_zips:
+            for name in fetcher.failed_zips:
+                stats['errors'].append(f"Zetta zip not extracted: {name}")
+
+        # Write batch BEFORE marking emails as processed — if write fails,
+        # emails stay in inbox and will be re-fetched on next run (no data loss).
+        write_ok = True
+        if pending and not dry_run:
             try:
-                shutil.rmtree(extract_dir, ignore_errors=True)
-            except OSError:
-                pass
+                write_batch_to_master(pending, master_path)
+            except Exception as e:
+                logger.error(f"Failed to write batch to master: {e}", exc_info=True)
+                stats['errors'].append(f"Master write failed: {e}")
+                pending.clear()
+                processed_imap_ids.clear()
+                stats['new_records'].clear()
+                stats['total_records'] = 0
+                write_ok = False
 
-    # Surface Zetta zip failures in email report
-    if fetcher.failed_zips:
-        for name in fetcher.failed_zips:
-            stats['errors'].append(f"Zetta zip not extracted: {name}")
-
-    # Write batch BEFORE marking emails as processed — if write fails,
-    # emails stay in inbox and will be re-fetched on next run (no data loss).
-    write_ok = True
-    if pending and not dry_run:
+        # Move emails and save IDs only AFTER successful write
         try:
-            write_batch_to_master(pending, master_path)
-        except Exception as e:
-            logger.error(f"Failed to write batch to master: {e}", exc_info=True)
-            stats['errors'].append(f"Master write failed: {e}")
-            pending.clear()
-            processed_imap_ids.clear()
-            stats['new_records'].clear()
-            stats['total_records'] = 0
-            write_ok = False
+            if not dry_run and write_ok:
+                dest = config.get('imap', {}).get('processed_folder', '').strip()
+                if dest and processed_imap_ids:
+                    fetcher.move_to_folder(processed_imap_ids, dest)
+                fetcher._save_processed_ids()
+            elif dry_run:
+                logger.info("Dry-run: not saving processed IDs")
+            else:
+                logger.warning("Write failed — skipping processed IDs save so emails re-fetch next run")
+        finally:
+            fetcher.disconnect()
 
-    # Move emails and save IDs only AFTER successful write
-    try:
-        if not dry_run and write_ok:
-            dest = config.get('imap', {}).get('processed_folder', '').strip()
-            if dest and processed_imap_ids:
-                fetcher.move_to_folder(processed_imap_ids, dest)
-            fetcher._save_processed_ids()
-        elif dry_run:
-            logger.info("Dry-run: not saving processed IDs")
-        else:
-            logger.warning("Write failed — skipping processed IDs save so emails re-fetch next run")
+        _print_summary(stats)
+
+        if not dry_run:
+            try:
+                # Export to network share BEFORE email — timeout (10s) prevents hanging,
+                # and any errors will be included in the email report
+                _export_to_network(config, stats)
+            except Exception as e:
+                logger.error(f"Network export failed: {e}", exc_info=True)
+                stats['errors'].append(f"Network export failed: {e}")
+            try:
+                _attach_monthly_if_last_day(config, stats)
+            except Exception as e:
+                logger.error(f"Monthly attachment failed: {e}", exc_info=True)
+            try:
+                from notifier import send_report
+                send_report(config, stats)
+            except Exception as e:
+                logger.error(f"Notifier failed: {e}", exc_info=True)
+
+        # Healthcheck ping — always fires so we know if cron stopped running
+        _ping_healthcheck(config, stats)
+
+    except Exception as e:
+        exception_class = type(e).__name__
+        raise
     finally:
-        fetcher.disconnect()
-
-    _print_summary(stats)
-
-    if not dry_run:
-        try:
-            # Export to network share BEFORE email — timeout (10s) prevents hanging,
-            # and any errors will be included in the email report
-            _export_to_network(config, stats)
-        except Exception as e:
-            logger.error(f"Network export failed: {e}", exc_info=True)
-            stats['errors'].append(f"Network export failed: {e}")
-        try:
-            _attach_monthly_if_last_day(config, stats)
-        except Exception as e:
-            logger.error(f"Monthly attachment failed: {e}", exc_info=True)
-        try:
-            from notifier import send_report
-            send_report(config, stats)
-        except Exception as e:
-            logger.error(f"Notifier failed: {e}", exc_info=True)
-
-    # Healthcheck ping — always fires so we know if cron stopped running
-    _ping_healthcheck(config, stats)
+        duration_s = int((datetime.now() - stats['run_start']).total_seconds())
+        status = 'CRASH' if exception_class else compute_status(stats)
+        logger.info(build_run_summary(
+            stats,
+            status=status,
+            duration_s=duration_s,
+            mode='imap',
+            exception_class=exception_class,
+        ))
 
     return stats
 
