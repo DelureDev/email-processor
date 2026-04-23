@@ -60,6 +60,7 @@ def send_report(config: dict, stats: dict):
         logger.info(f"Report sent to {', '.join(recipients)}")
     except Exception as e:
         logger.error(f"Failed to send report: {e}", exc_info=True)
+        stats['errors'].append(f"SMTP send failed: {e}")
 
 
 def _build_message(smtp_cfg: dict, stats: dict) -> MIMEMultipart:
