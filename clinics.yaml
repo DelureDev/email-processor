@@ -3,11 +3,31 @@
 # For each clinic, list all keyword variations that insurance companies
 # use to refer to it in their xlsx files. Matching is case-insensitive.
 #
-# Format:
-#   - name: "Название клиники"  ← this goes into the Клиника column
-#     keywords:
-#       - "Как страховая пишет название"
-#       - "Другой вариант написания"
+# Fields per entry:
+#   name             - Display name written to master.xlsx (Клиника column).
+#                      Treated as a stable identifier for dedup — renaming
+#                      splits historical records into two cohorts. Keep stable.
+#   id               - 8-digit code for 1C integration (ID Клиники column in
+#                      network CSV). Unique per clinic. Blank if empty.
+#   keywords         - Substrings to match in xlsx content (first 50 rows,
+#                      lowercased) or email subject. Case-insensitive.
+#                      Longest keyword wins across ALL clinics — prefer full
+#                      clinic names over abbreviations.
+#   extract_comment  - Optional. Set to `true` to also extract the program
+#                      description into "Комментарий в полис". Default false.
+#
+# Matching rules:
+#   1. Pipeline sorts all keywords (across all clinics) by length, longest first.
+#   2. Scans xlsx content + email subject for first match.
+#   3. That match's clinic wins.
+#   4. If no keyword matches: "⚠️ Не определено" (visible in email report).
+#
+# Detachment files are handled separately — content containing any of:
+#   "открепляем", "снятия с медицинского", "снять с медицинского"
+# returns empty clinic, no warning, no comment extraction.
+#
+# To add a new clinic: copy an existing entry, set unique `name` and `id`,
+# list every keyword an insurer might use (variants, addresses, abbreviations).
 
 clinics:
   - name: "Молодогвардейская"
