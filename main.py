@@ -540,26 +540,30 @@ def run_imap_mode(config: dict, dry_run: bool = False):
 
     # Write batch BEFORE marking emails as processed — if write fails,
     # emails stay in inbox and will be re-fetched on next run (no data loss).
+    write_ok = True
     if pending and not dry_run:
         try:
             write_batch_to_master(pending, master_path)
         except Exception as e:
             logger.error(f"Failed to write batch to master: {e}", exc_info=True)
             stats['errors'].append(f"Master write failed: {e}")
-            pending.clear()              # Signal: nothing was written
-            processed_imap_ids.clear()   # Don't move emails — re-fetch next run
-            stats['new_records'].clear() # Don't report records that weren't saved
+            pending.clear()
+            processed_imap_ids.clear()
+            stats['new_records'].clear()
             stats['total_records'] = 0
+            write_ok = False
 
     # Move emails and save IDs only AFTER successful write
     try:
-        if not dry_run:
+        if not dry_run and write_ok:
             dest = config.get('imap', {}).get('processed_folder', '').strip()
             if dest and processed_imap_ids:
                 fetcher.move_to_folder(processed_imap_ids, dest)
             fetcher._save_processed_ids()
-        else:
+        elif dry_run:
             logger.info("Dry-run: not saving processed IDs")
+        else:
+            logger.warning("Write failed — skipping processed IDs save so emails re-fetch next run")
     finally:
         fetcher.disconnect()
 

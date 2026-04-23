@@ -117,3 +117,50 @@ class TestMonthlyAttachmentFailure:
             assert any('monthly' in e.lower() or 'Failed' in e for e in stats['errors'])
         finally:
             os.unlink(corrupt_path)
+
+
+class TestProcessedIdsNotSavedOnWriteFailure:
+    """If master.xlsx write fails, processed_ids SQLite must NOT be updated."""
+
+    def test_processed_ids_save_skipped_when_write_fails(self, tmp_path, monkeypatch):
+        import main
+        from unittest.mock import MagicMock
+
+        fake_fetcher = MagicMock()
+        fake_fetcher.connect.return_value = None
+        fake_fetcher.fetch_attachments.return_value = [{
+            'filepath': str(tmp_path / 'dummy.xlsx'),
+            'sender': 'x@y.z', 'subject': '', 'date': '',
+            'message_id': '<m1>', 'imap_id': '1',
+        }]
+        (tmp_path / 'dummy.xlsx').write_bytes(b'')
+        fake_fetcher.failed_zips = []
+        fake_fetcher._save_processed_ids = MagicMock()
+        fake_fetcher.move_to_folder = MagicMock()
+        fake_fetcher.disconnect = MagicMock()
+
+        monkeypatch.setattr('fetcher.IMAPFetcher', lambda *a, **k: fake_fetcher)
+
+        def fake_process(path, master, cfg, stats, **kw):
+            kw['pending'].append({'ФИО': 'Test', '№ полиса': '1',
+                                  'Начало обслуживания': '01.01.2026',
+                                  'Конец обслуживания': '31.12.2026',
+                                  'Страховая компания': 'T', 'Страхователь': 'T',
+                                  'Клиника': 'X', 'Комментарий в полис': '',
+                                  'Источник файла': 'dummy.xlsx',
+                                  'Дата обработки': '23.04.2026'})
+        monkeypatch.setattr(main, 'process_file', fake_process)
+
+        def fake_write(*args, **kwargs):
+            raise IOError("disk full")
+        monkeypatch.setattr(main, 'write_batch_to_master', fake_write)
+        monkeypatch.setattr(main, 'load_existing_keys', lambda p: set())
+
+        cfg = {'output': {'master_file': str(tmp_path / 'm.xlsx')},
+               'processing': {'deduplicate': True},
+               'imap': {'processed_folder': 'Processed'}}
+
+        main.run_imap_mode(cfg, dry_run=False)
+
+        fake_fetcher._save_processed_ids.assert_not_called()
+        fake_fetcher.move_to_folder.assert_not_called()
