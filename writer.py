@@ -177,7 +177,7 @@ def _export_csv(master_path: str, new_records: list[dict]) -> None:
                 writer.writerow({k: _safe(v) for k, v in record.items()})
         logger.info(f"CSV backup updated: {csv_path} (+{len(new_records)} rows)")
     except Exception as e:
-        logger.warning(f"CSV backup failed: {e}")
+        logger.error(f"CSV backup failed: {e}")  # TODO: also append to stats['errors'] when writer signature carries stats
 
 
 _SIGNED_NUMBER_RE = re.compile(r'^-?\d+(\.\d+)?$')

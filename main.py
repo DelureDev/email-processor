@@ -249,7 +249,7 @@ def process_file(filepath: str, master_path: str, config: dict, stats: dict,
     ]
     if empty_date_records:
         names = ', '.join(r.get('ФИО', '?') for r in empty_date_records)
-        logger.warning(f"Empty dates: {len(empty_date_records)} record(s) in {filename} have no start or end date: {names}")
+        logger.error(f"Empty dates: {len(empty_date_records)} record(s) in {filename} have no start or end date: {names}")
         stats['errors'].append(f"Пустые даты ({len(empty_date_records)} зап.) в {filename}: {names}")
 
     # Detect clinic (once per file) and inject into all records BEFORE dedup,
@@ -499,7 +499,7 @@ def _ping_healthcheck(config: dict, stats: dict) -> None:
         logger.debug(f"Healthcheck pinged: {url}")
     except Exception as e:
         msg = f"Healthcheck ping failed: {e}"
-        logger.warning(msg)
+        logger.error(msg)
         if stats is not None:
             stats['errors'].append(msg)
 
