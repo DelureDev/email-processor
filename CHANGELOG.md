@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.10.9] - 2026-04-23
+### Fixed
+- Pidfile lock on `main.py` (`./logs/main.lock`, fcntl, non-blocking) prevents concurrent cron + manual runs from producing duplicate email reports or stale-dedup writes.
+- Parsers (`ingos.py`, `luchi.py`) raise `HeaderNotFoundError` on missing required columns; `main.py` quarantines the file and surfaces the error (was: silent empty result → mass data loss on insurer template change).
+- Zetta extraction temp directories are cleaned on password failure (was: disk leak `./temp/zetta_*` accumulating).
+- `_safe_fetch_rfc822` retries on `imaplib.IMAP4.abort`, `ssl.SSLError`, `OSError` transport failures; main fetch loop now uses the helper (consolidation; removes inline retry divergence).
+- `clean_dedup_val` collapses internal whitespace (tabs, `\xa0`, multiple spaces) so `"ИВАНОВ  ИВАН"` and `"ИВАНОВ ИВАН"` dedup as the same person.
+- Zetta password SEARCH failure-after-retry logged at WARNING (was DEBUG — invisible in production INFO).
+- `diagnostic.py` now raises `ValueError` on unresolved `${VAR}` (consistent with `main.py` since v1.10.7).
+- `TestWriteBatchFailure::test_imap_mode_survives_write_failure` now also asserts `_save_processed_ids` is skipped (was passing for a different reason).
+
+### Added
+- `tests/test_header_not_found.py` — 3 tests for `HeaderNotFoundError` parser path.
+- `tests/test_utils.py::TestCleanDedupVal` — 5 direct tests for whitespace / NaN handling.
+- `tests/test_pipeline_resilience.py::TestMonthlyAttachmentHappyPath` — 2 tests for last-day-of-month logic.
+- `tests/test_healthcheck.py` — 8 tests for `_ping_healthcheck` (empty/missing/https-guard/success/fail/trailing-slash/error/POST body).
+- `tests/test_network_export.py` — 3 smoke tests for `_export_to_network` (empty/happy/timeout).
+- `SETUP.md` — clean-VM onboarding guide.
+- `RECOVERY.md` — 6 failure-scenario runbooks (Yandex lockout, CIFS down, master.xlsx corrupt, processed_ids.db corrupt, missed cron, stale Zetta password).
+- `.env.example` — credential env-var template; `.env` added to `.gitignore`.
+- `config.example.yaml` now includes `imap.zetta_password_cache`, `output.csv_export_folder`, `output.network_timeout` with explanatory comments.
+- `clinics.yaml` now has a detailed usage header documenting schema, matching rules, detachment keywords, and how to add a new clinic.
+- `CLAUDE.md` updated for v1.10.8 changes — password cache, SEARCH/FETCH retry helpers, UTF-7 encoding, env-var validation, pidfile lock, new Ops section, merged duplicate "Versioning & releases" heading.
+
+### Housekeeping
+- Completed plan documents (4) and stale `PLAN.md` moved to `docs/historical/`.
+- Test suite: 148 passed / 17 skipped (was 124 / 17 at v1.10.8).
+
 ## [1.10.8] - 2026-04-23
 ### Added
 - Zetta monthly password now cached to `./zetta_password.json` (gitignored, mode 0600) on successful extraction. On subsequent runs the pipeline loads the cache and skips the IMAP pre-scan entirely, making Zetta ZIP extraction immune to Yandex's intermittent `[UNAVAILABLE]` rejections of the `FROM "parollpu@zettains.ru"` filter. Cache expires automatically when `valid_to < today`. Cache save also triggers from the main-search loop's monthly-password branches, not only the pre-scan.
