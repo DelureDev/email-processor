@@ -266,7 +266,7 @@ class IMAPFetcher:
                 try:
                     msg_data = None
                     for attempt in range(1, 4):
-                        st, data = self.mail.uid('FETCH', uid, '(RFC822)')
+                        st, data = self.mail.uid('FETCH', uid.decode(), '(RFC822)')
                         if st == 'OK':
                             msg_data = data
                             break
@@ -313,7 +313,7 @@ class IMAPFetcher:
 
             msg_data = None
             for attempt in range(1, 4):
-                status, data = self.mail.uid('FETCH', uid, '(RFC822)')
+                status, data = self.mail.uid('FETCH', uid.decode(), '(RFC822)')
                 if status == 'OK':
                     msg_data = data
                     break
