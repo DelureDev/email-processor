@@ -109,3 +109,29 @@ def test_format_date_dash_separated():
 def test_format_date_dot_year_first():
     from parsers.utils import format_date
     assert format_date('2026.03.01') == '01.03.2026'
+
+
+class TestCleanDedupVal:
+    def test_strips_leading_trailing(self):
+        from parsers.utils import clean_dedup_val
+        assert clean_dedup_val('  hello  ') == 'hello'
+
+    def test_collapses_internal_whitespace(self):
+        from parsers.utils import clean_dedup_val
+        assert clean_dedup_val('ИВАНОВ  ИВАН  ИВАНОВИЧ') == 'ИВАНОВ ИВАН ИВАНОВИЧ'
+
+    def test_collapses_tabs_and_nbsp(self):
+        from parsers.utils import clean_dedup_val
+        assert clean_dedup_val('ИВАНОВ\tИВАН') == 'ИВАНОВ ИВАН'
+        assert clean_dedup_val('ИВАНОВ\xa0ИВАН') == 'ИВАНОВ ИВАН'
+
+    def test_nan_variants_empty(self):
+        from parsers.utils import clean_dedup_val
+        assert clean_dedup_val('nan') == ''
+        assert clean_dedup_val('None') == ''
+        assert clean_dedup_val('NaT') == ''
+        assert clean_dedup_val(None) == ''
+
+    def test_preserves_normal_string(self):
+        from parsers.utils import clean_dedup_val
+        assert clean_dedup_val('ABC123') == 'ABC123'

@@ -2,6 +2,7 @@
 Shared parser utilities — eliminates duplication across all parsers.
 """
 import logging
+import re
 import pandas as pd
 from datetime import datetime
 
@@ -83,9 +84,15 @@ def assemble_fio(df, row_idx: int, col_familia: int,
 
 
 def clean_dedup_val(val) -> str:
-    """Clean a value for dedup key: strip, handle nan/None/NaT."""
-    s = str(val).strip() if val is not None else ''
-    return '' if s in ('nan', 'None', 'NaT') else s
+    """Clean a value for dedup key: strip, handle nan/None/NaT, collapse internal whitespace."""
+    if val is None:
+        return ''
+    s = str(val).strip()
+    if s in ('nan', 'None', 'NaT'):
+        return ''
+    # Collapse any run of whitespace (spaces, tabs, non-breaking spaces, \r, \n) to a single space
+    s = re.sub(r'\s+', ' ', s)
+    return s
 
 
 def norm_date_pad(s: str) -> str:
