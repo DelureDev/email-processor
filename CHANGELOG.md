@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.10.11] - 2026-04-23
+### Fixed
+- **C1 — Healthcheck honesty**: `notifier.send_report` now appends `"SMTP send failed: ..."` to `stats['errors']` on any SMTP exception, so `_ping_healthcheck` correctly flips to `/fail`. Previously SMTP failures were logged only, leaving healthcheck green while reports silently stopped.
+- **C2 — Mass duplication guard**: `writer.load_existing_keys` now raises `RuntimeError` when master.xlsx lacks the `Клиника` column. Previous silent fallback to 4-field dedup caused every historical row to re-insert on the next write because new records carried 5-field keys. Defensive fix — master files since v1.9 already have the column. Path is logged (not embedded in the exception) to avoid leaking it via the email report.
+- **C3 — Formula injection**: `writer._safe` tightened — only values matching `^-?\d+(\.\d+)?$` (pure signed numbers) bypass the apostrophe prefix. Previously `-1+cmd|'/C calc'!A1` passed through unescaped because `s[1].isdigit()` was True. Applies to both xlsx and CSV writes.
+- **C4 — VSK Страхователь column**: `parsers/vsk.py` now reads `Страхователь` from `Холдинг` (preferred) with fallback to `Место работы`. Previously all VSK records had the workplace string in the Страхователь field. Legacy records in master.xlsx remain wrong until the same insured is re-sent.
+- **C5 — RESO false positives**: removed the overly broad content rule `('reso', ('ресо',))` from `detector.CONTENT_RULES`. The remaining `('ресо-гарантия',)` rule covers real RESO files; the bare substring was silently mis-routing any file mentioning 'ресо' (e.g. 'Ресорс-М') to the RESO parser.
+
+### Added
+- `tests/test_vsk_strahovatel.py` — 2 tests for Холдинг-over-workplace preference and fallback.
+- `tests/test_writer.py::TestSafe` — 5 new tests (dash+digit formula, dash+digit+@, dash+digits+letters, negative int, negative decimal).
+- `tests/test_writer.py::TestLoadExistingKeys::test_raises_if_klinika_column_missing` — schema regression guard.
+- `tests/test_notifier.py::test_smtp_failure_recorded_in_stats_errors` — SMTP → healthcheck signal.
+- `tests/test_detector.py::test_reso_not_matched_on_bare_substring` — RESO substring regression.
+- `docs/superpowers/plans/2026-04-23-critical-bugs-c1-c5.md` — implementation plan for this release.
+
 ## [1.10.10] - 2026-04-23
 ### Fixed
 - Pidfile lock (`main.py`) now distinguishes `BlockingIOError` (another instance running — harmless, exit 0) from `PermissionError` (lockfile owned by another UID — exit 2 with stderr). Previously `EACCES` was silently treated as "already running" so a leftover-root lockfile would make cron silently no-op forever.
