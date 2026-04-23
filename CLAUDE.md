@@ -115,6 +115,15 @@ git push origin main
 git push origin v1.2.3
 ```
 
+## VM terminal constraint
+
+**Never give the user multiline code to paste into the VM terminal.** The SSH terminal adds leading spaces to every pasted line, causing `IndentationError` every time. When Python needs to run on the VM:
+- Write a `.py` script file, commit+push, user runs `git pull && python3 script.py`
+- For true one-liners only: `python3 -c "import x; print(x)"` (no indented blocks inside)
+- Shell: single-line commands only, no multiline heredocs
+
+## Versioning & releases
+
 4. Deploy to VM — always include this step after pushing, without waiting to be asked:
 ```bash
 # On VM:
