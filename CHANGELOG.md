@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.11.0] - 2026-04-24
+### Added
+- **Write network CSVs via SMB directly, no kernel mount** (`main._export_via_smb`): when `output.csv_export_folder` is a UNC path (starts with `\\` or `//`), the export uses the `smbprotocol` Python library to open files over SMB in userspace — no `/mnt/storage`, no `mount.cifs`, no kernel CIFS client at all. Eliminates the whole class of mount-layer failures (D-state hangs, `has not responded in 180 seconds` reconnect storms, stuck server-side handles, `Handle scavenged` Event Viewer entries).
+- `output.smb_credentials` config block (`username`, `password`, `domain`) — used only in UNC mode. `${ENV}` placeholders expanded at load time.
+- `smbprotocol>=1.13,<2.0` added to `requirements.txt`.
+
+### Changed
+- `_export_to_network` now dispatches based on path shape: UNC → `_export_via_smb`, local → existing mount-based path. Same `network_write_timeout` applies to both; same `stats['network_status']` contract.
+- Root-cause analysis from today's incident: the SMB stalls on the Windows server were caused by iSCSI backup I/O to the underlying LUN (10.10.10.50), not authentication — confirmed by the admin. Event ID 1017 `Handle scavenged` entries in Windows SMBServer/Operational are the symptom of our sessions being killed by Linux kernel after 180s of no response. Userspace SMB avoids the reconnect storm entirely because each write establishes a fresh short-lived session.
+
+### Migration
+To switch this host from mount-mode to UNC-mode:
+1. `pip install -r requirements.txt`
+2. Edit `config.yaml`:
+   ```yaml
+   output:
+     csv_export_folder: "\\\\10.10.10.21\\dms_reports"
+     smb_credentials:
+       username: "k.sikachev"
+       password: "${SMB_PASSWORD}"
+       domain: "fantasy.local"
+   ```
+3. `export SMB_PASSWORD=...` in the cron env or systemd unit.
+4. The `/mnt/storage` kernel mount can stay in fstab for the transition; remove once UNC-mode is stable.
+
 ## [1.10.17] - 2026-04-24
 ### Fixed
 - **Headerless + BOM-less CSV on zero-byte network file**: `_export_to_network` was gating the UTF-8 BOM + header row on `os.path.exists(dest)` only. If the file existed but was 0 bytes (e.g. from the `touch` CIFS-create workaround in v1.10.16, or a prior crashed run that left an empty file), the code appended data rows with no BOM and no header — producing a CSV that 1C could not parse (no column definitions, wrong encoding inference). Now checks `os.path.getsize(dest) == 0` too: a zero-byte file is treated the same as a missing file — write BOM + header + rows. Confirmed by comparing today's `records_2026-04-24.csv` (broken: jumps straight into `ГЛУХОВ МИХАИЛ...`) vs `records_2026-04-21.csv` (good: `\xef\xbb\xbf` + `ФИО;Дата рождения;...`).

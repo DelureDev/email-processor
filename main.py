@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.10.17"
+__version__ = "1.11.0"
 
 import os
 import re
@@ -368,15 +368,32 @@ def _attach_monthly_if_last_day(config: dict, stats: dict) -> None:
         stats['errors'].append(f"Monthly report build failed: {e}")
 
 
+def _is_unc_path(path: str) -> bool:
+    """True if path looks like an SMB UNC path (\\\\server\\share or //server/share)."""
+    p = path.strip()
+    return p.startswith('\\\\') or p.startswith('//')
+
+
 def _export_to_network(config: dict, stats: dict) -> None:
     """Write daily delta CSV and monthly master CSV to network folder if configured.
-    Both probe AND writes run under daemon-thread timeouts so a kernel-hung CIFS
-    mount cannot pin the process. Belt-and-suspenders when the mount is
-    configured with 'soft' (recommended fstab option)."""
+
+    Two modes:
+      - UNC path (\\\\10.10.10.21\\dms_reports): writes over SMB directly via
+        smbprotocol — no kernel mount, no D-state hangs, failures are Python
+        exceptions. Preferred since v1.11.0.
+      - Local path (/mnt/storage): writes through a kernel CIFS mount. Retained
+        for backward compatibility; subject to mount-layer hangs documented in
+        v1.10.14-v1.10.17.
+
+    Both paths run writes under daemon-thread timeouts as a final safety net."""
     folder = config.get('output', {}).get('csv_export_folder', '').strip()
     if not folder or not stats.get('new_records'):
         return
     logger = logging.getLogger(__name__)
+
+    if _is_unc_path(folder):
+        _export_via_smb(config, stats, folder)
+        return
 
     # Probe reachability with a daemon thread. ThreadPoolExecutor's `with` exit
     # calls shutdown(wait=True), which pins the process forever if the worker
@@ -518,6 +535,125 @@ def _export_to_network(config: dict, stats: dict) -> None:
     _write_one_with_timeout(monthly_dest, 'monthly')
 
     # If we got here without setting FAIL and both writes were attempted, mark OK.
+    if stats.get('network_status') != 'FAIL':
+        stats['network_status'] = 'OK'
+
+
+def _export_via_smb(config: dict, stats: dict, unc_folder: str) -> None:
+    """Write daily + monthly CSV via smbprotocol (userspace SMB, no kernel mount).
+
+    Bypasses the kernel CIFS client entirely — no /mnt/storage, no fstab.
+    Every write establishes a fresh SMB session and tears it down after the
+    file closes, so stuck server-side handles / stale sessions are no longer
+    a class of failure.
+
+    `unc_folder` is an SMB UNC path like '\\\\10.10.10.21\\dms_reports' or
+    '//10.10.10.21/dms_reports'. Credentials come from
+    config['output']['smb_credentials'] (username/password/domain) — the
+    outer load_config() already expanded any ${ENV} placeholders."""
+    logger = logging.getLogger(__name__)
+
+    try:
+        import smbclient
+        import smbprotocol.exceptions
+    except ImportError as e:
+        logger.error(f"smbprotocol not installed — cannot export via UNC path: {e}")
+        stats['errors'].append(f"smbprotocol missing for SMB export: {e}")
+        stats['network_status'] = 'FAIL'
+        return
+
+    creds = config.get('output', {}).get('smb_credentials', {}) or {}
+    username = creds.get('username', '').strip()
+    password = creds.get('password', '').strip()
+    domain = creds.get('domain', '').strip()
+    if not username or not password:
+        logger.error("output.smb_credentials username/password missing in config")
+        stats['errors'].append("SMB credentials missing in config")
+        stats['network_status'] = 'FAIL'
+        return
+
+    # Normalise UNC: smbprotocol expects backslashes on any OS
+    base = unc_folder.replace('/', '\\').rstrip('\\')
+
+    import csv
+    import threading
+    from writer import COLUMNS, _safe
+
+    csv_columns = []
+    for c in COLUMNS:
+        csv_columns.append(c)
+        if c == 'Клиника':
+            csv_columns.append('ID Клиники')
+
+    now = datetime.now()
+    records = stats['new_records']
+    write_timeout = config.get('output', {}).get('network_write_timeout', 30)
+
+    def _remote_exists_and_nonempty(path: str) -> tuple[bool, bool]:
+        """Returns (exists, non_empty). Uses stat-like call that can't be trapped
+        by kernel D-state because we're in userspace."""
+        try:
+            info = smbclient.stat(path, username=username, password=password, domain=domain)
+            return True, info.st_size > 0
+        except smbprotocol.exceptions.SMBOSError:
+            return False, False
+        except FileNotFoundError:
+            return False, False
+
+    def _write_one_smb(dest: str, kind: str) -> None:
+        result: dict = {}
+
+        def _work():
+            try:
+                exists, non_empty = _remote_exists_and_nonempty(dest)
+                # Empty-or-missing file → write header with BOM; otherwise append.
+                is_empty = not (exists and non_empty)
+                if is_empty:
+                    mode = 'w'
+                    encoding = 'utf-8-sig'
+                else:
+                    mode = 'a'
+                    encoding = 'utf-8'
+
+                with smbclient.open_file(
+                    dest, mode=mode, encoding=encoding, newline='',
+                    username=username, password=password, domain=domain,
+                ) as f:
+                    w = csv.DictWriter(
+                        f, fieldnames=csv_columns, extrasaction='ignore',
+                        delimiter=';', lineterminator='\r\n',
+                    )
+                    if is_empty:
+                        w.writeheader()
+                    for record in records:
+                        w.writerow({k: _safe(v) for k, v in record.items()})
+                result['ok'] = True
+            except Exception as e:
+                result['error'] = e
+
+        t = threading.Thread(target=_work, daemon=True, name=f'smb-{kind}-write')
+        t.start()
+        t.join(timeout=write_timeout)
+
+        if t.is_alive():
+            logger.error(f"SMB {kind} write timed out after {write_timeout}s: {dest}")
+            stats['errors'].append(f"SMB {kind} CSV timed out: {dest}")
+            stats['network_status'] = 'FAIL'
+        elif 'error' in result:
+            logger.error(f"Failed to export {kind} CSV via SMB: {result['error']}")
+            stats['errors'].append(f"SMB {kind} CSV failed: {result['error']}")
+            stats['network_status'] = 'FAIL'
+        else:
+            logger.info(f"Exported {kind} ({len(records)} records) via SMB to {dest}")
+
+    date_str = now.strftime('%Y-%m-%d')
+    daily_dest = f"{base}\\records_{date_str}.csv"
+    _write_one_smb(daily_dest, 'daily')
+
+    month_str = now.strftime('%Y-%m')
+    monthly_dest = f"{base}\\master_{month_str}.csv"
+    _write_one_smb(monthly_dest, 'monthly')
+
     if stats.get('network_status') != 'FAIL':
         stats['network_status'] = 'OK'
 

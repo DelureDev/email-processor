@@ -64,16 +64,31 @@ output:
   # Only two file types are written here:
   #   records_YYYY-MM-DD.csv  — daily delta (appended across runs within the day)
   #   master_YYYY-MM.csv      — monthly cumulative (new file each month)
-  # Network share path for daily + monthly CSV export.
-  # Empty string = disabled. Typically "/mnt/storage" on the production VM.
+  #
+  # Two possible values:
+  #   (a) UNC path, recommended:  "\\\\10.10.10.21\\dms_reports"
+  #       Writes go over SMB via smbprotocol — no kernel CIFS mount needed.
+  #       Eliminates D-state hangs and stuck-session issues. Requires
+  #       `pip install smbprotocol` and the smb_credentials block below.
+  #   (b) Local path (legacy):    "/mnt/storage"
+  #       Writes through a kernel CIFS mount. Subject to mount-layer hangs.
+  #
+  # Empty string = disabled.
   csv_export_folder: ""
   # Seconds to wait when probing the network share at startup (default: 10).
-  # If the mount has gone dead, we skip the export rather than hang.
+  # Only used for local-path mode; UNC mode opens a fresh connection per call.
   network_timeout: 10
   # Seconds to wait for each CSV write (daily + monthly) before giving up.
-  # With a 'soft' CIFS mount, writes fail fast with EIO — this cap just
-  # protects against 'hard' mounts or a server that stalls mid-write.
+  # Applies to both UNC and local modes.
   network_write_timeout: 30
+  # Credentials used only when csv_export_folder is a UNC path. Unused for
+  # local-path mode (that mode authenticates via /etc/cifs-creds at mount
+  # time). ${ENV_VAR} placeholders are expanded at load time; keep password
+  # in env vars rather than plaintext.
+  smb_credentials:
+    username: "k.sikachev"
+    password: "${SMB_PASSWORD}"
+    domain: "fantasy.local"
 
 # --- Logging ---
 logging:
