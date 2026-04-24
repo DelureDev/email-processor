@@ -59,16 +59,19 @@ def main() -> int:
         return 2
 
     path = sys.argv[1]
-    if not os.path.isfile(path):
-        print(f"not a file: {path}", file=sys.stderr)
-        return 2
 
-    # BOM sniff (cheap — 3 bytes, fast even on flaky CIFS)
+    # Do NOT probe with os.path.isfile() — it's a blocking syscall on CIFS
+    # that can hang indefinitely when the mount is half-dead, defeating all
+    # our per-op timeouts. Instead, let _read_head fail naturally; a missing
+    # file surfaces as FileNotFoundError inside the timeout-wrapped thread.
     sniff = _run_with_timeout(lambda: _read_head(path), name='bom-sniff')
     if sniff.get('timeout'):
         print(f"timeout reading first bytes of {path} — CIFS hung", file=sys.stderr)
         return 3
     if 'error' in sniff:
+        if isinstance(sniff['error'], FileNotFoundError):
+            print(f"not a file: {path}", file=sys.stderr)
+            return 2
         print(f"error reading {path}: {sniff['error']}", file=sys.stderr)
         return 3
     head = sniff['value']
