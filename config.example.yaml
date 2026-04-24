@@ -70,6 +70,10 @@ output:
   # Seconds to wait when probing the network share at startup (default: 10).
   # If the mount has gone dead, we skip the export rather than hang.
   network_timeout: 10
+  # Seconds to wait for each CSV write (daily + monthly) before giving up.
+  # With a 'soft' CIFS mount, writes fail fast with EIO — this cap just
+  # protects against 'hard' mounts or a server that stalls mid-write.
+  network_write_timeout: 30
 
 # --- Logging ---
 logging:

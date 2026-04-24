@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.10.15] - 2026-04-24
+### Fixed
+- **CIFS writes no longer pin the process** (`main._export_to_network`): the daily and monthly CSV append blocks now run under a daemon-thread `join(timeout=...)` cap (config: `output.network_write_timeout`, default 30s). v1.10.14 protected only the probe; if the probe passed but the actual write stalled (server responds to SMB NEGOTIATE but drops mid-write, or mount is `hard` and flaky), the main thread blocked forever with no upper bound. Today's incident was exactly this — `resend_today.py` hit 7 min D-state on the write syscall. The daemon-thread cap means the main flow moves on after `network_write_timeout` seconds even if the underlying syscall is still stuck.
+
+### Changed
+- `_export_to_network`: extracted daily + monthly append into `_write_one_with_timeout(dest, kind)` helper (closure over `records`/`csv_columns`/`stats`/`logger`). The old two near-identical blocks collapsed into two one-liners at the call sites.
+- `resend_today.py`: now also calls `_export_to_network` after `send_report` — recovery script rebuilds today's network CSV, not just the email. Success message reports both `smtp_status` and `network_status`.
+
+### Ops
+- **Recommended fstab hardening for `/mnt/storage`**: add `soft,retrans=2,timeo=30,actimeo=5,nofail` and move credentials to `/etc/cifs-creds` (mode 0600). Without `soft`, the kernel retries I/O forever on a flaking SMB server — processes enter D-state and become unkillable. `soft` makes writes fail fast with EIO, which the application-level try/except now handles cleanly. See RECOVERY.md (forthcoming) or the v1.10.15 session notes.
+
 ## [1.10.14] - 2026-04-24
 ### Fixed
 - **CIFS probe no longer pins the process** (`main._export_to_network`): replaced `concurrent.futures.ThreadPoolExecutor(...) as pool` with a bare `threading.Thread(daemon=True)` probe. The `with` block was calling `shutdown(wait=True)` on exit, which blocked forever when `os.path.isdir(folder)` was stuck in a D-state CIFS syscall. Daemon threads are not joined at interpreter shutdown, so the main flow can complete even when the probe never returns. This is the same failure mode as the v1.9.3 incident — the earlier timeout wrapper only masked it until the ThreadPoolExecutor cleanup phase. Symptom: multiple hung `main.py` processes accumulating for weeks, `timeout 300` never firing because SIGKILL can't reach D-state threads, `send_report()` never reached, no email.

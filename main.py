@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.10.14"
+__version__ = "1.10.15"
 
 import os
 import re
@@ -370,7 +370,9 @@ def _attach_monthly_if_last_day(config: dict, stats: dict) -> None:
 
 def _export_to_network(config: dict, stats: dict) -> None:
     """Write daily delta CSV and monthly master CSV to network folder if configured.
-    Runs with a timeout to avoid hanging on dead network mounts."""
+    Both probe AND writes run under daemon-thread timeouts so a kernel-hung CIFS
+    mount cannot pin the process. Belt-and-suspenders when the mount is
+    configured with 'soft' (recommended fstab option)."""
     folder = config.get('output', {}).get('csv_export_folder', '').strip()
     if not folder or not stats.get('new_records'):
         return
@@ -453,44 +455,54 @@ def _export_to_network(config: dict, stats: dict) -> None:
 
     now = datetime.now()
     records = stats['new_records']
+    write_timeout = config.get('output', {}).get('network_write_timeout', 30)
+
+    def _write_one_with_timeout(dest: str, kind: str) -> None:
+        """Run migrate-header + append under a daemon-thread timeout.
+        Any syscall inside can still block indefinitely on a 'hard' CIFS mount,
+        but this join() cap means the main flow moves on after write_timeout
+        instead of pinning. Mutates stats on failure."""
+        result: dict = {}
+
+        def _work():
+            try:
+                _migrate_csv_header(dest)
+                write_header = not os.path.exists(dest)
+                encoding = 'utf-8-sig' if write_header else 'utf-8'
+                with open(dest, 'a', newline='', encoding=encoding) as f:
+                    w = csv.DictWriter(f, fieldnames=csv_columns, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
+                    if write_header:
+                        w.writeheader()
+                    for record in records:
+                        w.writerow({k: _safe(v) for k, v in record.items()})
+                result['ok'] = True
+            except Exception as e:
+                result['error'] = e
+
+        t = threading.Thread(target=_work, daemon=True, name=f'cifs-{kind}-write')
+        t.start()
+        t.join(timeout=write_timeout)
+
+        if t.is_alive():
+            logger.error(f"CIFS {kind} write timed out after {write_timeout}s: {dest}")
+            stats['errors'].append(f"Network {kind} CSV timed out: {dest}")
+            stats['network_status'] = 'FAIL'
+        elif 'error' in result:
+            logger.error(f"Failed to export {kind} CSV to network: {result['error']}")
+            stats['errors'].append(f"Network {kind} CSV failed: {result['error']}")
+            stats['network_status'] = 'FAIL'
+        else:
+            logger.info(f"Exported {kind} ({len(records)} records) to {dest}")
 
     # 1. Daily delta — append across runs within the same day
     date_str = now.strftime('%Y-%m-%d')
     daily_dest = os.path.join(folder, f'records_{date_str}.csv')
-    _migrate_csv_header(daily_dest)
-    try:
-        write_header = not os.path.exists(daily_dest)
-        encoding = 'utf-8-sig' if write_header else 'utf-8'
-        with open(daily_dest, 'a', newline='', encoding=encoding) as f:
-            w = csv.DictWriter(f, fieldnames=csv_columns, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
-            if write_header:
-                w.writeheader()
-            for record in records:
-                w.writerow({k: _safe(v) for k, v in record.items()})
-        logger.info(f"Exported daily delta ({len(records)} records) to {daily_dest}")
-    except Exception as e:
-        logger.error(f"Failed to export daily CSV to network: {e}")
-        stats['errors'].append(f"Network daily CSV failed: {e}")
-        stats['network_status'] = 'FAIL'
+    _write_one_with_timeout(daily_dest, 'daily')
 
     # 2. Monthly master — append to current month file, new file each month
     month_str = now.strftime('%Y-%m')
     monthly_dest = os.path.join(folder, f'master_{month_str}.csv')
-    _migrate_csv_header(monthly_dest)
-    try:
-        write_header = not os.path.exists(monthly_dest)
-        encoding = 'utf-8-sig' if write_header else 'utf-8'
-        with open(monthly_dest, 'a', newline='', encoding=encoding) as f:
-            w = csv.DictWriter(f, fieldnames=csv_columns, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
-            if write_header:
-                w.writeheader()
-            for record in records:
-                w.writerow({k: _safe(v) for k, v in record.items()})
-        logger.info(f"Appended {len(records)} records to monthly master {monthly_dest}")
-    except Exception as e:
-        logger.error(f"Failed to export monthly CSV to network: {e}")
-        stats['errors'].append(f"Network monthly CSV failed: {e}")
-        stats['network_status'] = 'FAIL'
+    _write_one_with_timeout(monthly_dest, 'monthly')
 
     # If we got here without setting FAIL and both writes were attempted, mark OK.
     if stats.get('network_status') != 'FAIL':

@@ -80,7 +80,8 @@ Production VM: deploy via `git push` then `git pull` on VM.
 Key config options added since v1.0:
 - `imap.processed_folder` — folder name to move processed emails into (e.g. `"Обработанные"`)
 - `output.csv_export_folder` — network share path for daily + monthly CSV export
-- `output.network_timeout` — seconds to wait for network share accessibility (default: 10)
+- `output.network_timeout` — seconds to wait for network share accessibility probe (default: 10)
+- `output.network_write_timeout` — seconds to wait for each CSV write before giving up (default: 30). Caps daemon-thread `join()` so a stalled CIFS write can't pin the process. See v1.10.15.
 - `imap.zetta_password_cache` — path to the Zetta monthly-password disk cache (default: `./zetta_password.json`). Gitignored, mode 0600, auto-expires when `valid_to < today`. See CHANGELOG v1.10.8.
 - `clinics.yaml` — separate file, not inside `config.yaml`
 
@@ -151,7 +152,7 @@ Decision tree before posting a VM command:
 
 ## Fix history
 
-See `CHANGELOG.md` for per-version details. Current version: **v1.10.10**.
+See `CHANGELOG.md` for per-version details. Current version: **v1.10.15**.
 
 ## Security hardening
 
