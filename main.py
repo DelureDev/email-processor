@@ -572,6 +572,10 @@ def _export_via_smb(config: dict, stats: dict, unc_folder: str) -> None:
         stats['network_status'] = 'FAIL'
         return
 
+    # smbprotocol's smbclient wrapper takes domain as part of the username
+    # in DOMAIN\\user form (not a separate kwarg). Build it once here.
+    user_spec = f"{domain}\\{username}" if domain else username
+
     # Normalise UNC: smbprotocol expects backslashes on any OS
     base = unc_folder.replace('/', '\\').rstrip('\\')
 
@@ -593,7 +597,7 @@ def _export_via_smb(config: dict, stats: dict, unc_folder: str) -> None:
         """Returns (exists, non_empty). Uses stat-like call that can't be trapped
         by kernel D-state because we're in userspace."""
         try:
-            info = smbclient.stat(path, username=username, password=password, domain=domain)
+            info = smbclient.stat(path, username=user_spec, password=password)
             return True, info.st_size > 0
         except smbprotocol.exceptions.SMBOSError:
             return False, False
@@ -617,7 +621,7 @@ def _export_via_smb(config: dict, stats: dict, unc_folder: str) -> None:
 
                 with smbclient.open_file(
                     dest, mode=mode, encoding=encoding, newline='',
-                    username=username, password=password, domain=domain,
+                    username=user_spec, password=password,
                 ) as f:
                     w = csv.DictWriter(
                         f, fieldnames=csv_columns, extrasaction='ignore',
