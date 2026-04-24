@@ -152,7 +152,7 @@ Decision tree before posting a VM command:
 
 ## Fix history
 
-See `CHANGELOG.md` for per-version details. Current version: **v1.10.15**.
+See `CHANGELOG.md` for per-version details. Current version: **v1.10.16**.
 
 ## Security hardening
 

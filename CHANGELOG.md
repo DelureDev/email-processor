@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.10.16] - 2026-04-24
+### Fixed
+- **Shell prompt no longer hangs after a CIFS write timeout** (`main._force_exit_if_stuck_threads`): after our 30s Python timeout fires, any daemon thread still in a kernel D-state syscall keeps the Python process from being reaped — Linux holds the process open until the uninterruptible syscall returns (up to ~70s for CIFS `soft,retrans=2`, since CIFS' per-request timeout is ~35s regardless of the `timeo` option). The helper runs at the end of `__main__` in both `main.py` and `resend_today.py`; if daemon threads are still alive, it calls `os._exit()` to bypass Python shutdown. Shell returns immediately; the stuck kernel thread is cleaned up asynchronously when its syscall eventually times out.
+- **`_migrate_csv_header` reads only the header line on the fast path**: previously `rows = list(reader)` loaded the entire CSV into memory just to check the first row for the `ID Клиники` column. On a CIFS mount with an established `master_YYYY-MM.csv` (already-migrated), every daily run was reading hundreds of rows worth of SMB ops for no reason. Now only the header is read on the common path; full-file read only happens the one time migration is actually needed.
+
+### Docs
+- CHANGELOG/CLAUDE.md: dropped the `timeo=30` recommendation from v1.10.15 notes. `timeo` is an NFS mount option — Linux CIFS rejects it with `cifs: Unknown parameter 'timeo'`. For CIFS the effective per-request timeout is kernel-internal (~35s) and not tunable; `soft,retrans=N` is enough.
+
+### Ops
+- **Recommended fstab for `/mnt/storage`** (revised from v1.10.15):
+  ```
+  //10.10.10.21/dms_reports /mnt/storage cifs credentials=/etc/cifs-creds,domain=fantasy,iocharset=utf8,uid=adminos,file_mode=0755,dir_mode=0755,vers=2.1,soft,retrans=2,actimeo=5,_netdev,nofail 0 0
+  ```
+  Requires `cifs-utils` package (provides `/sbin/mount.cifs` for `credentials=` option).
+  `/etc/cifs-creds` should be mode 0600 with `username=`, `password=`, `domain=` lines.
+
 ## [1.10.15] - 2026-04-24
 ### Fixed
 - **CIFS writes no longer pin the process** (`main._export_to_network`): the daily and monthly CSV append blocks now run under a daemon-thread `join(timeout=...)` cap (config: `output.network_write_timeout`, default 30s). v1.10.14 protected only the probe; if the probe passed but the actual write stalled (server responds to SMB NEGOTIATE but drops mid-write, or mount is `hard` and flaky), the main thread blocked forever with no upper bound. Today's incident was exactly this — `resend_today.py` hit 7 min D-state on the write syscall. The daemon-thread cap means the main flow moves on after `network_write_timeout` seconds even if the underlying syscall is still stuck.

@@ -19,7 +19,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from main import load_config, setup_logging, make_stats, _export_to_network
+from main import load_config, setup_logging, make_stats, _export_to_network, _force_exit_if_stuck_threads
 from parsers.utils import norm_date_pad
 from notifier import send_report
 
@@ -67,4 +67,8 @@ def main() -> int:
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    code = main()
+    # If CIFS write timed out, a daemon thread may be pinned in D-state and
+    # Python cannot reap itself cleanly. Escape hatch so the shell returns now.
+    _force_exit_if_stuck_threads(code)
+    sys.exit(code)

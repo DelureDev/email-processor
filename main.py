@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.10.15"
+__version__ = "1.10.16"
 
 import os
 import re
@@ -426,21 +426,29 @@ def _export_to_network(config: dict, stats: dict) -> None:
 
     def _migrate_csv_header(filepath: str) -> None:
         """If existing CSV has old header (without ID Клиники), rewrite with new column.
-        Old data rows get empty ID Клиники; new rows will have the value."""
+        Old data rows get empty ID Клиники; new rows will have the value.
+
+        Reads only the first line for the common no-migration-needed path — on
+        CIFS with a large master_YYYY-MM.csv, reading the entire file just to
+        check the header was wasting tens of seconds per run and multiplying
+        CIFS ops for no reason."""
         if not os.path.exists(filepath):
             return
         try:
             with open(filepath, 'r', encoding='utf-8-sig', newline='') as f:
                 reader = csv.reader(f, delimiter=';')
-                rows = list(reader)
-            if not rows:
-                return
-            header = rows[0]
+                try:
+                    header = next(reader)
+                except StopIteration:
+                    return  # empty file
             if 'ID Клиники' in header:
-                return  # already migrated
+                return  # already migrated — fast path, only first line was read
             if 'Клиника' not in header:
                 return  # unrecognized format, don't touch
-            # Insert ID Клиники after Клиника
+            # Migration needed — now we have to read the full file (rare, one-off).
+            with open(filepath, 'r', encoding='utf-8-sig', newline='') as f:
+                reader = csv.reader(f, delimiter=';')
+                rows = list(reader)
             idx = header.index('Клиника') + 1
             new_header = header[:idx] + ['ID Клиники'] + header[idx:]
             new_rows = [new_header]
@@ -507,6 +515,33 @@ def _export_to_network(config: dict, stats: dict) -> None:
     # If we got here without setting FAIL and both writes were attempted, mark OK.
     if stats.get('network_status') != 'FAIL':
         stats['network_status'] = 'OK'
+
+
+def _force_exit_if_stuck_threads(exit_code: int = 0) -> None:
+    """Escape hatch for when daemon threads are pinned in D-state kernel syscalls
+    (dead CIFS mount, NFS server gone, etc). Even though our join(timeout=N)
+    cap lets the main flow continue, the Python process itself cannot cleanly
+    exit while a daemon thread is stuck in an uninterruptible syscall — the
+    kernel holds the process open until the syscall returns (which for CIFS
+    soft,retrans=2 can be up to ~70s). From the user's perspective the shell
+    prompt hangs.
+
+    os._exit bypasses Python shutdown entirely and tells the kernel to mark
+    the process for exit. The kernel cleans up what it can immediately and
+    reaps the D-state thread whenever the syscall eventually returns. User
+    gets their prompt back now, not in a minute."""
+    import threading
+    live = [t for t in threading.enumerate()
+            if t.daemon and t.is_alive() and t is not threading.main_thread()]
+    if not live:
+        return
+    names = [t.name for t in live]
+    logger = logging.getLogger(__name__)
+    logger.warning(f"Forcing exit — {len(live)} daemon thread(s) still alive "
+                   f"(likely D-state CIFS syscall): {names}")
+    sys.stderr.write(f"[force-exit] {len(live)} stuck daemon thread(s): {names}\n")
+    sys.stderr.flush()
+    os._exit(exit_code)
 
 
 def _ping_healthcheck(config: dict, stats: dict) -> None:
@@ -915,3 +950,5 @@ if __name__ == '__main__':
         run_local_mode(args.local, config, dry_run=args.dry_run)
     else:
         run_imap_mode(config, dry_run=args.dry_run)
+
+    _force_exit_if_stuck_threads()
