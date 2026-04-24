@@ -593,31 +593,48 @@ def _export_via_smb(config: dict, stats: dict, unc_folder: str) -> None:
     records = stats['new_records']
     write_timeout = config.get('output', {}).get('network_write_timeout', 30)
 
-    def _remote_exists_and_nonempty(path: str) -> tuple[bool, bool]:
-        """Returns (exists, non_empty). Uses stat-like call that can't be trapped
-        by kernel D-state because we're in userspace."""
+    def _remote_file_state(path: str) -> str:
+        """Returns one of:
+          'fresh'   — file doesn't exist or is 0 bytes (write BOM + header + rows)
+          'valid'   — file starts with UTF-8 BOM (append rows, no BOM, no header)
+          'corrupt' — file has content but no BOM (overwrite, auto-heal)
+
+        'corrupt' auto-heal is important: earlier today's mount-layer failures
+        left headerless files on the share. Without this check we'd keep
+        appending data rows to a file 1C can't parse."""
         try:
             info = smbclient.stat(path, username=user_spec, password=password)
-            return True, info.st_size > 0
-        except smbprotocol.exceptions.SMBOSError:
-            return False, False
-        except FileNotFoundError:
-            return False, False
+        except (smbprotocol.exceptions.SMBOSError, FileNotFoundError, OSError):
+            return 'fresh'
+        if info.st_size == 0:
+            return 'fresh'
+        if info.st_size < 3:
+            return 'corrupt'  # too small to hold a BOM + any content
+        try:
+            with smbclient.open_file(path, mode='rb',
+                                     username=user_spec, password=password) as f:
+                head = f.read(3)
+            return 'valid' if head == b'\xef\xbb\xbf' else 'corrupt'
+        except Exception:
+            return 'fresh'
 
     def _write_one_smb(dest: str, kind: str) -> None:
         result: dict = {}
 
         def _work():
             try:
-                exists, non_empty = _remote_exists_and_nonempty(dest)
-                # Empty-or-missing file → write header with BOM; otherwise append.
-                is_empty = not (exists and non_empty)
-                if is_empty:
-                    mode = 'w'
-                    encoding = 'utf-8-sig'
-                else:
+                state = _remote_file_state(dest)
+                # 'valid' → append; 'fresh' / 'corrupt' → overwrite with BOM + header
+                if state == 'valid':
                     mode = 'a'
                     encoding = 'utf-8'
+                    is_empty = False
+                else:
+                    mode = 'w'
+                    encoding = 'utf-8-sig'
+                    is_empty = True
+                    if state == 'corrupt':
+                        logger.warning(f"SMB {kind}: overwriting headerless/BOM-less {dest}")
 
                 with smbclient.open_file(
                     dest, mode=mode, encoding=encoding, newline='',
