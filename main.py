@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.10.16"
+__version__ = "1.10.17"
 
 import os
 import re
@@ -475,11 +475,16 @@ def _export_to_network(config: dict, stats: dict) -> None:
         def _work():
             try:
                 _migrate_csv_header(dest)
-                write_header = not os.path.exists(dest)
-                encoding = 'utf-8-sig' if write_header else 'utf-8'
+                # Treat a zero-byte file the same as a missing file. A 0-byte file
+                # happens when: (a) the user `touch`ed it as a CIFS-create workaround,
+                # (b) a previous run crashed/hung after open() but before writing.
+                # Without this check we'd skip the header AND the UTF-8 BOM, producing
+                # a 1C-unreadable CSV with data rows but no column definitions.
+                is_empty = not os.path.exists(dest) or os.path.getsize(dest) == 0
+                encoding = 'utf-8-sig' if is_empty else 'utf-8'
                 with open(dest, 'a', newline='', encoding=encoding) as f:
                     w = csv.DictWriter(f, fieldnames=csv_columns, extrasaction='ignore', delimiter=';', lineterminator='\r\n')
-                    if write_header:
+                    if is_empty:
                         w.writeheader()
                     for record in records:
                         w.writerow({k: _safe(v) for k, v in record.items()})

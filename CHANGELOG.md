@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.17] - 2026-04-24
+### Fixed
+- **Headerless + BOM-less CSV on zero-byte network file**: `_export_to_network` was gating the UTF-8 BOM + header row on `os.path.exists(dest)` only. If the file existed but was 0 bytes (e.g. from the `touch` CIFS-create workaround in v1.10.16, or a prior crashed run that left an empty file), the code appended data rows with no BOM and no header — producing a CSV that 1C could not parse (no column definitions, wrong encoding inference). Now checks `os.path.getsize(dest) == 0` too: a zero-byte file is treated the same as a missing file — write BOM + header + rows. Confirmed by comparing today's `records_2026-04-24.csv` (broken: jumps straight into `ГЛУХОВ МИХАИЛ...`) vs `records_2026-04-21.csv` (good: `\xef\xbb\xbf` + `ФИО;Дата рождения;...`).
+
+### Added
+- `fix_headerless_csv.py` — one-off repair script that prepends UTF-8 BOM + the canonical 12-column header to a headerless CSV in place (atomic tmp+rename). Detects already-fixed files via BOM sniff; safe to run multiple times. For repairing files produced by the pre-v1.10.17 bug without requiring a full re-run.
+
 ## [1.10.16] - 2026-04-24
 ### Fixed
 - **Shell prompt no longer hangs after a CIFS write timeout** (`main._force_exit_if_stuck_threads`): after our 30s Python timeout fires, any daemon thread still in a kernel D-state syscall keeps the Python process from being reaped — Linux holds the process open until the uninterruptible syscall returns (up to ~70s for CIFS `soft,retrans=2`, since CIFS' per-request timeout is ~35s regardless of the `timeo` option). The helper runs at the end of `__main__` in both `main.py` and `resend_today.py`; if daemon threads are still alive, it calls `os._exit()` to bypass Python shutdown. Shell returns immediately; the stuck kernel thread is cleaned up asynchronously when its syscall eventually times out.
