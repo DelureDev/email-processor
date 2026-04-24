@@ -134,10 +134,20 @@ git pull
 
 ## VM terminal constraint
 
-**Never give the user multiline code to paste into the VM terminal.** The SSH terminal adds leading spaces to every pasted line, causing `IndentationError` every time. When Python needs to run on the VM:
-- Write a `.py` script file, commit+push, user runs `git pull && python3 script.py`
-- For true one-liners only: `python3 -c "import x; print(x)"` (no indented blocks inside)
-- Shell: single-line commands only, no multiline heredocs
+**Never give the user multiline code to paste into the VM terminal.** The SSH terminal adds leading spaces to every pasted line, causing `IndentationError` every time. This includes **any `python3 -c "..."` whose quoted body contains a newline** — even short lines break on paste.
+
+Decision tree before posting a VM command:
+1. Does the command contain a newline inside quotes? → **FORBIDDEN.** Write a script file instead.
+2. Does `python3 -c` contain `:` (function/with/if block)? → **FORBIDDEN.** Python blocks can't be one physical line.
+3. Shell pipeline on one physical line (grep, ls, ps, tail, cat)? → OK.
+4. True one-expression `python3 -c "expr"` with no newline? → OK.
+
+**Preferred path for VM Python checks:**
+- Write a small `diag_*.py` in the repo, commit+push
+- Tell user: `git pull && python3 diag_foo.py`
+- Delete or move under `scripts/` when done
+
+**For config reads, prefer shell over Python**: `grep '^smtp:' -A 20 config.yaml` beats any inline Python block.
 
 ## Fix history
 

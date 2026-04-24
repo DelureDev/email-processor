@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.10.13"
+__version__ = "1.10.14"
 
 import os
 import re
@@ -376,23 +376,41 @@ def _export_to_network(config: dict, stats: dict) -> None:
         return
     logger = logging.getLogger(__name__)
 
-    # Quick accessibility check with timeout — dead NFS mounts hang os.path.exists()
-    import concurrent.futures
+    # Probe reachability with a daemon thread. ThreadPoolExecutor's `with` exit
+    # calls shutdown(wait=True), which pins the process forever if the worker
+    # is stuck in a D-state CIFS syscall (v1.9.3 incident kept recurring for
+    # exactly this reason — see v1.10.14 in CHANGELOG). Daemon threads are not
+    # joined at interpreter shutdown, so the main flow can complete even when
+    # the probe never returns.
+    import threading
     timeout_sec = config.get('output', {}).get('network_timeout', 10)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(os.path.isdir, folder)
+    probe_result: dict = {}
+
+    def _probe():
         try:
-            reachable = future.result(timeout=timeout_sec)
-        except concurrent.futures.TimeoutError:
-            logger.error(f"Network share not reachable (timed out after {timeout_sec}s): {folder}")
-            stats['errors'].append(f"Network share timed out: {folder}")
-            stats['network_status'] = 'FAIL'
-            return
-        if not reachable:
-            logger.error(f"Network share folder does not exist: {folder}")
-            stats['errors'].append(f"Network share not found: {folder}")
-            stats['network_status'] = 'FAIL'
-            return
+            probe_result['reachable'] = os.path.isdir(folder)
+        except Exception as e:
+            probe_result['error'] = e
+
+    probe_thread = threading.Thread(target=_probe, daemon=True, name='cifs-probe')
+    probe_thread.start()
+    probe_thread.join(timeout=timeout_sec)
+
+    if probe_thread.is_alive():
+        logger.error(f"Network share not reachable (timed out after {timeout_sec}s): {folder}")
+        stats['errors'].append(f"Network share timed out: {folder}")
+        stats['network_status'] = 'FAIL'
+        return
+    if 'error' in probe_result:
+        logger.error(f"Network share probe failed: {probe_result['error']}")
+        stats['errors'].append(f"Network share probe error: {probe_result['error']}")
+        stats['network_status'] = 'FAIL'
+        return
+    if not probe_result.get('reachable'):
+        logger.error(f"Network share folder does not exist: {folder}")
+        stats['errors'].append(f"Network share not found: {folder}")
+        stats['network_status'] = 'FAIL'
+        return
 
     import csv
     from writer import COLUMNS, _safe
@@ -609,14 +627,11 @@ def run_imap_mode(config: dict, dry_run: bool = False):
 
         _print_summary(stats)
 
+        # Order matters: email and healthcheck MUST run before the CIFS export.
+        # The export probe can leak a daemon thread stuck in a D-state syscall
+        # if the SMB server is dead; putting it last means the run's email and
+        # health ping still complete before the process gets pinned at exit.
         if not dry_run:
-            try:
-                # Export to network share BEFORE email — timeout (10s) prevents hanging,
-                # and any errors will be included in the email report
-                _export_to_network(config, stats)
-            except Exception as e:
-                logger.error(f"Network export failed: {e}", exc_info=True)
-                stats['errors'].append(f"Network export failed: {e}")
             try:
                 _attach_monthly_if_last_day(config, stats)
             except Exception as e:
@@ -629,6 +644,13 @@ def run_imap_mode(config: dict, dry_run: bool = False):
 
         # Healthcheck ping — always fires so we know if cron stopped running
         _ping_healthcheck(config, stats)
+
+        if not dry_run:
+            try:
+                _export_to_network(config, stats)
+            except Exception as e:
+                logger.error(f"Network export failed: {e}", exc_info=True)
+                stats['errors'].append(f"Network export failed: {e}")
 
     except Exception as e:
         exception_class = type(e).__name__
@@ -684,12 +706,8 @@ def run_local_mode(folder: str, config: dict, dry_run: bool = False):
 
         _print_summary(stats)
 
+        # Same ordering as run_imap_mode: email first, export last.
         if not dry_run:
-            try:
-                _export_to_network(config, stats)
-            except Exception as e:
-                logger.error(f"Network export failed: {e}", exc_info=True)
-                stats['errors'].append(f"Network export failed: {e}")
             try:
                 _attach_monthly_if_last_day(config, stats)
             except Exception as e:
@@ -699,6 +717,11 @@ def run_local_mode(folder: str, config: dict, dry_run: bool = False):
                 send_report(config, stats)
             except Exception as e:
                 logger.error(f"Notifier failed: {e}", exc_info=True)
+            try:
+                _export_to_network(config, stats)
+            except Exception as e:
+                logger.error(f"Network export failed: {e}", exc_info=True)
+                stats['errors'].append(f"Network export failed: {e}")
     except Exception as e:
         exception_class = type(e).__name__
         raise

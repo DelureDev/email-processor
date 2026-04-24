@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.14] - 2026-04-24
+### Fixed
+- **CIFS probe no longer pins the process** (`main._export_to_network`): replaced `concurrent.futures.ThreadPoolExecutor(...) as pool` with a bare `threading.Thread(daemon=True)` probe. The `with` block was calling `shutdown(wait=True)` on exit, which blocked forever when `os.path.isdir(folder)` was stuck in a D-state CIFS syscall. Daemon threads are not joined at interpreter shutdown, so the main flow can complete even when the probe never returns. This is the same failure mode as the v1.9.3 incident — the earlier timeout wrapper only masked it until the ThreadPoolExecutor cleanup phase. Symptom: multiple hung `main.py` processes accumulating for weeks, `timeout 300` never firing because SIGKILL can't reach D-state threads, `send_report()` never reached, no email.
+- **Post-processing order** (`run_imap_mode`, `run_local_mode`): `send_report()` and `_ping_healthcheck()` now run BEFORE `_export_to_network()`. Even if a future CIFS outage leaks a stuck daemon thread at exit, the run's email and healthcheck ping have already completed.
+
+### Notes
+- If you see stacked CIFS mounts on the same mountpoint (e.g. two `//host/share on /mnt/... type cifs` lines from `mount`), the SMB remount is layering instead of replacing. Fix at the mount layer (`umount -l` + investigate `_netdev` / automount config); this code change only prevents the hang from breaking the email pipeline, not the underlying SMB flakiness.
+
 ## [1.10.13] - 2026-04-24
 ### Added
 - **Alfa per-row Франшиза comment**: when an Alfa xlsx has a comment-column header (any of `_COMMENT_COLUMNS` — "Вид медицинского обслуживания", "Программа ДМС", etc.), each row's cell in that column is checked for the keyword "Франшиза" (case-insensitive). If found, the full cell text lands in `record['Комментарий в полис']`. Flows through to `master.xlsx`, the daily delta xlsx attached to email, and the daily/monthly CSVs on the network share. Fixes cases where Alfa files with blanked clinic names ("сети клиник ________") previously silently lost this financial info.
