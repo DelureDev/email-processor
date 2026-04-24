@@ -38,9 +38,56 @@ For cron, make sure the crontab line sources `.env` before running python:
 
 Wait 5–10 minutes after repeated failed logins before retrying — Yandex has a cooldown.
 
-## 2. Network share (/mnt/storage) unreachable
+## 2. Network share (CSV export) failing
 
-**Symptom:** Email report shows `Network share not reachable (timed out after 10s)`; daily CSV not written.
+**Symptom:** Email report shows `network_status=FAIL` or `SMB ... CSV failed: ...` or `Network share not reachable`; daily CSV not appearing on the share.
+
+First check which mode is in use:
+```bash
+grep csv_export_folder config.yaml
+```
+- Starts with `\\` or `//` → **Option A below** (userspace SMB)
+- Plain local path like `/mnt/storage` → **Option B below** (kernel CIFS mount)
+
+### Option A: Userspace SMB (UNC mode, v1.11.0+)
+
+**Investigate:**
+```bash
+tail -80 logs/processor.log | grep -iE 'smb|error|failed|network'
+```
+
+**Common causes:**
+
+- **Wrong / rotated password.** Log shows `STATUS_LOGON_FAILURE`, `STATUS_MORE_PROCESSING_REQUIRED` loops, or `AuthenticationFailed`:
+  ```bash
+  echo $SMB_PASSWORD      # verify env var is set in your shell
+  # For cron: check the SMB_PASSWORD= line at top of `crontab -l`
+  ```
+  Update `.env` or crontab with the new password, re-run.
+
+- **Server unreachable** (error like `[Errno 113] No route to host` or `ConnectionRefusedError`):
+  ```bash
+  ping 10.10.10.21
+  timeout 3 bash -c "</dev/tcp/10.10.10.21/445" && echo "port 445 OK" || echo "port 445 closed"
+  ```
+
+- **Server wedged** (`smbprotocol.exceptions.SMBResponseException`, `STATUS_IO_TIMEOUT`, or our 30s timeout fires):
+  ```bash
+  # Confirm userspace SMB can negotiate (bypasses any kernel mount state):
+  sudo bash diag_smb.sh > ~/smb-diag-$(date +%Y%m%d-%H%M).log
+  cat ~/smb-diag-*.log
+  ```
+  Steps 3 and 4 test `smbprotocol`-equivalent paths. If those work but our exports don't, our config is wrong (credentials, UNC path); if those also fail, the server itself has an issue — forward the log to whoever owns it.
+
+**Manual backfill with the correct file:**
+```bash
+python3 build_local_daily_csv.py   # writes records_YYYY-MM-DD.csv locally from master.xlsx
+# When share is reachable:
+timeout 30 cp records_YYYY-MM-DD.csv /mnt/storage/   # if mount still available
+# Or delete/resend via the pipeline on the next cron run — `_export_via_smb` auto-heals corrupt files.
+```
+
+### Option B: Legacy kernel CIFS mount
 
 **Investigate:**
 ```bash
@@ -55,11 +102,17 @@ sudo dmesg | grep -i cifs | tail -10
 - **SMB version mismatch (policy update).** Look for `STATUS_LOGON_FAILURE` in dmesg → try:
   ```bash
   sudo sed -i 's/vers=2.0/vers=2.1/' /etc/fstab
-  sudo umount /mnt/storage
+  sudo umount -l /mnt/storage
   sudo mount /mnt/storage
   ls /mnt/storage
   ```
   We hit this on 2026-04-23 — Windows policy forced minimum SMB 2.1. If 2.1 still fails, try 3.0.
+
+- **D-state zombie processes pinning the mount** (we hit this multiple times 2026-04-24):
+  ```bash
+  ps -eo pid,etime,stat,cmd | grep -E 'python|mount\.cifs' | grep -v grep
+  ```
+  Anything with `D` in STAT is unkillable — `umount -l` + `mount` usually clears. If not, reboot.
 
 - **Server reboot or credentials changed:**
   ```bash
@@ -72,7 +125,9 @@ sudo dmesg | grep -i cifs | tail -10
   ping 10.10.10.21
   ```
 
-**Pipeline impact:** only CSV export is affected. Records are still written to local `master.xlsx`. Once the mount is back, the next run auto-resumes the CSV export. To backfill the missed day, manually copy the daily CSV from the local record or re-run `main.py` (records are idempotent; dedup prevents duplicates).
+**Consider migrating to Option A** if this incident keeps recurring — userspace SMB makes the entire class of mount-layer failures impossible. See `SETUP.md` section 5 for the 5-line config change.
+
+**Pipeline impact (both options):** only CSV export is affected. Records are still written to local `master.xlsx`. Once the share is back, the next run auto-resumes the CSV export; Option A additionally auto-heals corrupt files (headerless / BOM-less) left by prior failed runs.
 
 ## 3. `master.xlsx` corrupted or lost
 

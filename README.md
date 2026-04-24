@@ -11,7 +11,7 @@
 - **Комментарий в полис** — извлекает описание программы ДМС из файла (для нужных клиник, флаг `extract_comment: true` в `clinics.yaml`)
 - **Дедупликация** — по ФИО + полис + даты обслуживания + клиника; нормализация `ё` → `е`
 - **Email-отчёт** — итоги обработки + вложение `records_YYYY-MM-DD.xlsx` с новыми записями; в последний день месяца прикрепляется xlsx со всеми записями текущего месяца
-- **Экспорт на сетевой диск** — ежедневный CSV + ежемесячный `master_YYYY-MM.csv` автоматически копируются в сетевую папку (CIFS/SMB) для загрузки в 1С. Таймаут 10с при недоступности шары — не блокирует email-отчёт
+- **Экспорт на сетевой диск** — ежедневный CSV + ежемесячный `master_YYYY-MM.csv` автоматически копируются в сетевую папку (SMB, userspace через `smbprotocol` или legacy через CIFS-mount) для загрузки в 1С. Таймауты не блокируют email-отчёт при недоступности сервера
 - **Архивирование писем** — обработанные письма переносятся в папку "Обработанные" (настраивается в конфиге)
 - **Резервное копирование** — `master.xlsx.bak` + `master.csv` создаются после каждой записи
 - **Карантин** — файлы с ошибками парсинга сохраняются в `./quarantine/`
@@ -65,12 +65,6 @@ crontab -e
 Для мониторинга cron — зарегистрироваться на [healthchecks.io](https://healthchecks.io) (бесплатно), вставить URL в `config.yaml`:
 ```yaml
 healthcheck_url: "https://hc-ping.com/your-uuid-here"
-```
-
-Для защиты от зависания монтирования сетевой папки добавьте watchdog в cron:
-```bash
-# Проверять монтирование каждые 15 минут и перемонтировать при необходимости
-*/15 * * * * ls /mnt/storage > /dev/null 2>&1 || mount -a
 ```
 
 ## Единая схема данных
@@ -129,32 +123,59 @@ email-processor/
 └── processed_ids.db     # SQLite: отслеживание обработанных писем (мигрировано из JSON)
 ```
 
-## Экспорт на сетевой диск (SMB/CIFS)
+## Экспорт на сетевой диск (SMB)
 
-Для автоматической выгрузки ежедневных CSV в сетевую папку (например, для 1С):
+Два способа на выбор — в `config.yaml` ставите нужный путь, код сам переключается.
+
+### Вариант A: Userspace SMB (рекомендуется, v1.11.0+)
+
+Запись идёт напрямую через Python-библиотеку `smbprotocol` — без монтирования, без ядерных таймаутов, без залипших хэндлов на сервере.
+
+```yaml
+output:
+  master_file: "./output/master.xlsx"
+  csv_export_folder: "\\\\SERVER\\SHARE"   # UNC-путь
+  smb_credentials:
+    username: "user.name"
+    password: "${SMB_PASSWORD}"             # из окружения
+    domain: "yourdomain.local"
+```
+
+В окружение (или в `.env` / `crontab`):
+```bash
+export SMB_PASSWORD="..."
+```
+
+`pip install -r requirements.txt` поставит `smbprotocol`. Больше ничего не нужно — ни `cifs-utils`, ни `/etc/fstab`, ни `mount`.
+
+### Вариант B: Legacy CIFS mount (для обратной совместимости)
+
+Работает, но подвержен зависаниям при проблемах на стороне SMB-сервера (D-state процессы, см. CHANGELOG v1.9.3–v1.10.17).
 
 ```bash
-# Установить cifs-utils
 sudo apt install cifs-utils
-
-# Создать точку монтирования
 sudo mkdir -p /mnt/storage
+```
 
-# Смонтировать шару
-sudo mount -t cifs //SERVER/SHARE /mnt/storage -o username=USER,password=PASS,domain=DOMAIN,iocharset=utf8
+В `/etc/fstab`:
+```
+//SERVER/SHARE /mnt/storage cifs credentials=/etc/cifs-creds,iocharset=utf8,uid=adminos,file_mode=0755,dir_mode=0755,vers=2.1,soft,retrans=2,actimeo=5,_netdev,nofail 0 0
+```
 
-# Добавить в /etc/fstab для автомонтирования
-//SERVER/SHARE /mnt/storage cifs credentials=/etc/cifs-credentials,iocharset=utf8,uid=1000,_netdev,vers=3.0 0 0
+`/etc/cifs-creds` (0600):
+```
+username=user.name
+password=...
+domain=yourdomain.local
 ```
 
 В `config.yaml`:
 ```yaml
 output:
-  master_file: "./output/master.xlsx"
   csv_export_folder: "/mnt/storage"
 ```
 
-После каждого запуска файл `records_YYYY-MM-DD.csv` появится в сетевой папке.
+После каждого запуска в сетевой папке появляются `records_YYYY-MM-DD.csv` и `master_YYYY-MM.csv`.
 
 ## Добавление новой страховой компании
 

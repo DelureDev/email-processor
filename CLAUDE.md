@@ -79,9 +79,10 @@ Production VM: deploy via `git push` then `git pull` on VM.
 
 Key config options added since v1.0:
 - `imap.processed_folder` — folder name to move processed emails into (e.g. `"Обработанные"`)
-- `output.csv_export_folder` — network share path for daily + monthly CSV export
-- `output.network_timeout` — seconds to wait for network share accessibility probe (default: 10)
-- `output.network_write_timeout` — seconds to wait for each CSV write before giving up (default: 30). Caps daemon-thread `join()` so a stalled CIFS write can't pin the process. See v1.10.15.
+- `output.csv_export_folder` — network share path for daily + monthly CSV export. Accepts either a **UNC path** (`\\10.10.10.21\dms_reports` or `//server/share`) or a **local path** (`/mnt/storage`). UNC triggers userspace SMB via `smbprotocol` (v1.11.0+) — no kernel mount, no D-state hangs. Local path triggers the legacy mount-based writer. Dispatch is automatic based on the string shape. UNC is recommended.
+- `output.smb_credentials` — required when `csv_export_folder` is a UNC path. Block with `username` / `password` / `domain` keys; `${ENV}` placeholders are expanded at load time. Unused in local-path mode (that mode authenticates via `/etc/cifs-creds` at mount time).
+- `output.network_timeout` — seconds to wait for network share accessibility probe (default: 10). Only used in local-path mode.
+- `output.network_write_timeout` — seconds to wait for each CSV write before giving up (default: 30). Applies to both modes as a daemon-thread safety net. See v1.10.15 / v1.11.0.
 - `imap.zetta_password_cache` — path to the Zetta monthly-password disk cache (default: `./zetta_password.json`). Gitignored, mode 0600, auto-expires when `valid_to < today`. See CHANGELOG v1.10.8.
 - `clinics.yaml` — separate file, not inside `config.yaml`
 
