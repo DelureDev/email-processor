@@ -3,20 +3,25 @@
 that was produced by the v1.10.15/v1.10.16 code path when the file existed
 as zero bytes (e.g. after `touch` workaround on a flaky CIFS mount).
 
-Writes atomically via tmp + rename so a concurrent cron run can't see the
-file half-repaired. Safe to run multiple times — detects existing header.
+Minimises CIFS ops: one read of the original content, one write of
+BOM + header + content. Wraps both in a daemon-thread timeout and a
+force-exit escape hatch so a hung CIFS mount doesn't pin the shell.
+
+Idempotent — detects an existing BOM and exits 0 without touching the file.
 
     cd /home/adminos/email-processor && python3 fix_headerless_csv.py /mnt/storage/records_2026-04-24.csv
 """
 import os
 import sys
-import tempfile
+import threading
 
 from writer import COLUMNS
+from main import _force_exit_if_stuck_threads
 
 BOM = '﻿'
 DELIMITER = ';'
 LINE = '\r\n'
+OP_TIMEOUT_SEC = 30
 
 
 def build_header() -> str:
@@ -26,6 +31,26 @@ def build_header() -> str:
         if c == 'Клиника':
             cols.append('ID Клиники')
     return DELIMITER.join(cols)
+
+
+def _run_with_timeout(fn, name: str) -> dict:
+    """Run fn() in a daemon thread with OP_TIMEOUT_SEC cap.
+    Returns a dict with {ok: True} / {error: ...} / {timeout: True}."""
+    result: dict = {}
+
+    def _work():
+        try:
+            result['value'] = fn()
+            result['ok'] = True
+        except Exception as e:
+            result['error'] = e
+
+    t = threading.Thread(target=_work, daemon=True, name=name)
+    t.start()
+    t.join(timeout=OP_TIMEOUT_SEC)
+    if t.is_alive():
+        result['timeout'] = True
+    return result
 
 
 def main() -> int:
@@ -38,42 +63,65 @@ def main() -> int:
         print(f"not a file: {path}", file=sys.stderr)
         return 2
 
-    header = build_header()
-
-    with open(path, 'rb') as f:
-        head = f.read(4)
-
+    # BOM sniff (cheap — 3 bytes, fast even on flaky CIFS)
+    sniff = _run_with_timeout(lambda: _read_head(path), name='bom-sniff')
+    if sniff.get('timeout'):
+        print(f"timeout reading first bytes of {path} — CIFS hung", file=sys.stderr)
+        return 3
+    if 'error' in sniff:
+        print(f"error reading {path}: {sniff['error']}", file=sys.stderr)
+        return 3
+    head = sniff['value']
     if head.startswith(b'\xef\xbb\xbf'):
         print(f"already has UTF-8 BOM — leaving alone: {path}")
         return 0
 
-    # Not BOM-prefixed. Prepend BOM + header row, keep the rest.
-    tmp_fd, tmp_path = tempfile.mkstemp(
-        prefix='.fix_headerless_', suffix='.csv',
-        dir=os.path.dirname(path) or '.'
-    )
-    try:
-        with os.fdopen(tmp_fd, 'wb') as out:
-            out.write((BOM + header + LINE).encode('utf-8'))
-            with open(path, 'rb') as src:
-                while True:
-                    chunk = src.read(64 * 1024)
-                    if not chunk:
-                        break
-                    out.write(chunk)
-            out.flush()
-            os.fsync(out.fileno())
-        os.replace(tmp_path, path)
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
+    header = build_header()
+    prefix = (BOM + header + LINE).encode('utf-8')
 
-    print(f"Prepended BOM + header to {path}")
+    # One read of the whole file
+    read_res = _run_with_timeout(lambda: _read_all(path), name='csv-read')
+    if read_res.get('timeout'):
+        print(f"timeout reading full {path} — CIFS hung", file=sys.stderr)
+        return 3
+    if 'error' in read_res:
+        print(f"error reading {path}: {read_res['error']}", file=sys.stderr)
+        return 3
+    original = read_res['value']
+
+    new_content = prefix + original
+
+    # One write of BOM + header + original content
+    write_res = _run_with_timeout(lambda: _write_all(path, new_content), name='csv-write')
+    if write_res.get('timeout'):
+        print(f"timeout writing {path} — CIFS hung, content unchanged", file=sys.stderr)
+        return 3
+    if 'error' in write_res:
+        print(f"error writing {path}: {write_res['error']}", file=sys.stderr)
+        return 3
+
+    print(f"Prepended BOM + header to {path} ({len(original)} -> {len(new_content)} bytes)")
     return 0
 
 
+def _read_head(path: str) -> bytes:
+    with open(path, 'rb') as f:
+        return f.read(4)
+
+
+def _read_all(path: str) -> bytes:
+    with open(path, 'rb') as f:
+        return f.read()
+
+
+def _write_all(path: str, content: bytes) -> None:
+    with open(path, 'wb') as f:
+        f.write(content)
+        f.flush()
+        os.fsync(f.fileno())
+
+
 if __name__ == '__main__':
-    sys.exit(main())
+    code = main()
+    _force_exit_if_stuck_threads(code)
+    sys.exit(code)
