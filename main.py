@@ -662,6 +662,19 @@ def _export_via_smb(config: dict, stats: dict, unc_folder: str) -> None:
         stats['network_status'] = 'OK'
 
 
+def _is_library_internal_daemon(thread_name: str) -> bool:
+    """Daemon threads from libraries that are expected to be idle-alive at exit
+    (just waiting for work that will never come). These are safe to abandon —
+    Python's normal shutdown handles them fine. Only unknown / unnamed daemons
+    are treated as potentially-stuck and trigger force-exit."""
+    if not thread_name:
+        return False
+    # smbprotocol keeps a msg_worker thread alive per connection for async I/O
+    if thread_name.startswith('msg_worker-'):
+        return True
+    return False
+
+
 def _force_exit_if_stuck_threads(exit_code: int = 0) -> None:
     """Escape hatch for when daemon threads are pinned in D-state kernel syscalls
     (dead CIFS mount, NFS server gone, etc). Even though our join(timeout=N)
@@ -673,18 +686,21 @@ def _force_exit_if_stuck_threads(exit_code: int = 0) -> None:
 
     os._exit bypasses Python shutdown entirely and tells the kernel to mark
     the process for exit. The kernel cleans up what it can immediately and
-    reaps the D-state thread whenever the syscall eventually returns. User
-    gets their prompt back now, not in a minute."""
+    reaps the D-state thread whenever the syscall eventually returns.
+
+    Library-internal daemons (e.g. smbprotocol msg_worker) are filtered out —
+    they're idle-alive by design and don't need the force-exit hammer."""
     import threading
     live = [t for t in threading.enumerate()
             if t.daemon and t.is_alive() and t is not threading.main_thread()]
-    if not live:
-        return
-    names = [t.name for t in live]
+    stuck = [t for t in live if not _is_library_internal_daemon(t.name or '')]
+    if not stuck:
+        return  # either nothing alive, or only known-safe library daemons
+    names = [t.name for t in stuck]
     logger = logging.getLogger(__name__)
-    logger.warning(f"Forcing exit — {len(live)} daemon thread(s) still alive "
+    logger.warning(f"Forcing exit — {len(stuck)} daemon thread(s) still alive "
                    f"(likely D-state CIFS syscall): {names}")
-    sys.stderr.write(f"[force-exit] {len(live)} stuck daemon thread(s): {names}\n")
+    sys.stderr.write(f"[force-exit] {len(stuck)} stuck daemon thread(s): {names}\n")
     sys.stderr.flush()
     os._exit(exit_code)
 
