@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""One-off: resend the daily email report for records written today.
+"""One-off: resend the daily email report for records written today, and
+rebuild today's daily CSV on the network share.
 
 Use case: a cron run wrote master.xlsx but never reached send_report()
-(e.g. it hung on a CIFS syscall before v1.10.14). Reads today's rows
-from master.xlsx by Дата обработки, builds a stats dict, reuses the
-existing notifier to send the report.
+or _export_to_network() (e.g. it hung on a CIFS syscall before v1.10.14).
+Reads today's rows from master.xlsx by Дата обработки, builds a stats
+dict, reuses the existing notifier to send the report, and reuses
+_export_to_network to (re)create records_YYYY-MM-DD.csv on the share.
+
+Network CSV is append-mode — delete the 0kb/partial file first if you
+want a clean rebuild.
 
 Run once, then delete (or keep under scripts/ for next incident):
     cd /home/adminos/email-processor && python3 resend_today.py
@@ -14,7 +19,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from main import load_config, setup_logging, make_stats
+from main import load_config, setup_logging, make_stats, _export_to_network
 from parsers.utils import norm_date_pad
 from notifier import send_report
 
@@ -49,11 +54,14 @@ def main() -> int:
         stats['by_company'][company] += 1
 
     send_report(config, stats)
+    _export_to_network(config, stats)
 
-    if stats.get('smtp_status') == 'OK':
-        print(f"Report sent: {len(todays)} records dated {today}.")
+    smtp = stats.get('smtp_status')
+    net = stats.get('network_status')
+    if smtp == 'OK' and net in ('OK', None):
+        print(f"Report sent + network CSV rebuilt: {len(todays)} records dated {today}.")
         return 0
-    print(f"send_report returned without SMTP success. smtp_status={stats.get('smtp_status')}, "
+    print(f"Partial success. smtp_status={smtp}, network_status={net}, "
           f"errors={stats.get('errors')}", file=sys.stderr)
     return 3
 
