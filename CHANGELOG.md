@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.11.1] - 2026-04-25
+### Fixed
+- **SMB writes are atomic now: no more 0-byte stubs on the share** (`main._write_one_smb`). Previous behaviour opened the destination file (`records_YYYY-MM-DD.csv`, `master_YYYY-MM.csv`) directly in `mode='w'`, which truncates the file on the server at SMB CREATE *before* any data is sent. When a write hung past `network_write_timeout` (today's 2026-04-25 incident: server stopped responding after the first SMB Write Response), the daemon thread was abandoned and the share was left with a freshly-created 0-byte file — visible as `records_2026-04-25.csv  A  0  …` in `smbclient ls` output. 1C then read an empty CSV.
+- New flow: build the complete file content in memory (BOM + header + previous rows for `valid` state, or BOM + header for `fresh`/`corrupt`), write it to `<dest>.<uuid8>.tmp` (a fresh SMB path with no prior orphan handle), then `smbclient.replace(tmp, dest)` to publish atomically. `dest` is never opened in `mode='w'` directly, so a hung write or rename leaves the previous file intact instead of stamping a 0-byte stub on it.
+- Side benefit: writing all the bytes in one binary `f.write(payload)` instead of many text-mode row writes also means fewer SMB Write round-trips, so fewer chances for the server to hang mid-stream. And the `.tmp` path has no path-specific orphan handle from prior failed runs, which was likely the proximate cause of today's 08:43 retry hanging on the same `records_2026-04-25.csv` path that 08:00 had partially opened.
+- On any exception during the tmp-write or replace, best-effort `smbclient.remove(tmp_path)` cleans up the partial tmp before re-raising. Outer `except` still records `network_status=FAIL`.
+
+### Known limitation
+- Server-side SMB stalls themselves are not fixed by this — they're owned by the Windows file-server admin (iSCSI LUN backup contention has been the working theory). What this fix removes is the asymmetric failure where writes silently destroy the previous good file. If the server keeps hanging, the failed run leaves `dest` exactly as the previous run left it (or absent on a new day), and `network_status=FAIL` shows up in `RUN_SUMMARY` and (after the next fix) the email report.
+- A leaked `<dest>.<uuid>.tmp` file is theoretically possible if a write succeeds but both the rename and the cleanup-remove fail. Acceptable trade-off; sweep manually if noticed.
+
 ## [1.11.0] - 2026-04-24
 ### Added
 - **Write network CSVs via SMB directly, no kernel mount** (`main._export_via_smb`): when `output.csv_export_folder` is a UNC path (starts with `\\` or `//`), the export uses the `smbprotocol` Python library to open files over SMB in userspace — no `/mnt/storage`, no `mount.cifs`, no kernel CIFS client at all. Eliminates the whole class of mount-layer failures (D-state hangs, `has not responded in 180 seconds` reconnect storms, stuck server-side handles, `Handle scavenged` Event Viewer entries).

@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.11.0"
+__version__ = "1.11.1"
 
 import os
 import re
@@ -619,35 +619,65 @@ def _export_via_smb(config: dict, stats: dict, unc_folder: str) -> None:
             return 'fresh'
 
     def _write_one_smb(dest: str, kind: str) -> None:
+        import io
+        import uuid
         result: dict = {}
 
         def _work():
             try:
                 state = _remote_file_state(dest)
-                # 'valid' → append; 'fresh' / 'corrupt' → overwrite with BOM + header
-                if state == 'valid':
-                    mode = 'a'
-                    encoding = 'utf-8'
-                    is_empty = False
-                else:
-                    mode = 'w'
-                    encoding = 'utf-8-sig'
-                    is_empty = True
-                    if state == 'corrupt':
-                        logger.warning(f"SMB {kind}: overwriting headerless/BOM-less {dest}")
 
-                with smbclient.open_file(
-                    dest, mode=mode, encoding=encoding, newline='',
-                    username=user_spec, password=password,
-                ) as f:
-                    w = csv.DictWriter(
-                        f, fieldnames=csv_columns, extrasaction='ignore',
-                        delimiter=';', lineterminator='\r\n',
+                # Build the full file content in memory: BOM + (header or existing
+                # rows) + this run's new rows. Building in memory means one binary
+                # SMB write instead of many row-sized writes — fewer chances for
+                # the server to hang mid-stream, and we never have to flush a
+                # text-mode buffer over a flaky link.
+                buf = io.StringIO(newline='')
+                buf.write('﻿')
+                row_writer = csv.DictWriter(
+                    buf, fieldnames=csv_columns, extrasaction='ignore',
+                    delimiter=';', lineterminator='\r\n',
+                )
+                if state == 'valid':
+                    with smbclient.open_file(
+                        dest, mode='r', encoding='utf-8-sig', newline='',
+                        username=user_spec, password=password,
+                    ) as f:
+                        buf.write(f.read())
+                else:
+                    if state == 'corrupt':
+                        logger.warning(f"SMB {kind}: replacing headerless/BOM-less {dest}")
+                    row_writer.writeheader()
+                for record in records:
+                    row_writer.writerow({k: _safe(v) for k, v in record.items()})
+
+                payload = buf.getvalue().encode('utf-8')
+
+                # Atomic publish: write to a uuid-suffixed tmp path that has no
+                # prior handle on the server, then SMB-rename over dest. We never
+                # call mode='w' on dest, so a hung write leaves whatever was
+                # there before — no 0-byte stub stamped on top of last good file.
+                tmp_path = f"{dest}.{uuid.uuid4().hex[:8]}.tmp"
+                try:
+                    with smbclient.open_file(
+                        tmp_path, mode='wb',
+                        username=user_spec, password=password,
+                    ) as f:
+                        f.write(payload)
+                    smbclient.replace(
+                        tmp_path, dest,
+                        username=user_spec, password=password,
                     )
-                    if is_empty:
-                        w.writeheader()
-                    for record in records:
-                        w.writerow({k: _safe(v) for k, v in record.items()})
+                except Exception:
+                    try:
+                        smbclient.remove(
+                            tmp_path,
+                            username=user_spec, password=password,
+                        )
+                    except Exception:
+                        pass
+                    raise
+
                 result['ok'] = True
             except Exception as e:
                 result['error'] = e
