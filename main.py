@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.11.1"
+__version__ = "1.11.2"
 
 import os
 import re
@@ -882,30 +882,35 @@ def run_imap_mode(config: dict, dry_run: bool = False):
 
         _print_summary(stats)
 
-        # Order matters: email and healthcheck MUST run before the CIFS export.
-        # The export probe can leak a daemon thread stuck in a D-state syscall
-        # if the SMB server is dead; putting it last means the run's email and
-        # health ping still complete before the process gets pinned at exit.
+        # Order: monthly-attach → network-export → email → healthcheck.
+        # Pre-v1.11.0 the export was last because kernel CIFS could pin the
+        # process in a D-state syscall — putting export last meant the email
+        # and healthcheck still completed before the process got stuck at exit.
+        # smbprotocol (v1.11.0+) is pure userspace TCP and the daemon-thread
+        # cap + force-exit hatch already handles abandoned writes cleanly, so
+        # the original ordering rationale no longer applies. Running export
+        # before send_report means the email reflects network_status truthfully
+        # — silent SMB failures used to land in stats AFTER the email had
+        # already gone out, hiding 0-byte CSVs from the morning report.
         if not dry_run:
             try:
                 _attach_monthly_if_last_day(config, stats)
             except Exception as e:
                 logger.error(f"Monthly attachment failed: {e}", exc_info=True)
             try:
+                _export_to_network(config, stats)
+            except Exception as e:
+                logger.error(f"Network export failed: {e}", exc_info=True)
+                stats['errors'].append(f"Network export failed: {e}")
+            try:
                 from notifier import send_report
                 send_report(config, stats)
             except Exception as e:
                 logger.error(f"Notifier failed: {e}", exc_info=True)
 
-        # Healthcheck ping — always fires so we know if cron stopped running
+        # Healthcheck ping — always fires so we know if cron stopped running.
+        # Runs last so the /fail-vs-/ok decision sees errors from every prior step.
         _ping_healthcheck(config, stats)
-
-        if not dry_run:
-            try:
-                _export_to_network(config, stats)
-            except Exception as e:
-                logger.error(f"Network export failed: {e}", exc_info=True)
-                stats['errors'].append(f"Network export failed: {e}")
 
     except Exception as e:
         exception_class = type(e).__name__

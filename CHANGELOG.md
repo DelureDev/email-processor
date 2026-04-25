@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.11.2] - 2026-04-25
+### Fixed
+- **Email report now reflects network export status** (`main.run_imap_mode`). Previously `send_report(config, stats)` ran *before* `_export_to_network(config, stats)`, so any SMB write timeout / failure landed in `stats['errors']` and `stats['network_status']` only after the morning email had already gone out. Today's incident: 08:00 cron emailed `errors=0` and `RUN_SUMMARY` then logged `errors=2 network=FAIL` — user found out only at 1C-load time when the daily CSV was 0 KB on the share.
+- New order in `run_imap_mode`: `_attach_monthly_if_last_day` → `_export_to_network` → `send_report` → `_ping_healthcheck`. The email is now the truthful summary of the entire run, and the healthcheck `/fail` vs `/ok` endpoint sees errors from every prior step.
+
+### Notes
+- The original "email-must-run-before-export" rationale (export could pin the process in a D-state CIFS syscall) is obsolete since v1.11.0. `smbprotocol` is pure userspace TCP — abandoned writes are handled by the existing daemon-thread join-with-timeout + `_force_exit_if_stuck_threads` hatch. No regression in worst-case completion: the export's hard ceiling is `network_write_timeout × 2` (~60s default), well under any reasonable cron-job timeout.
+- Existing comment block at the call site was rewritten to explain the new ordering and capture why the v1.10.x rationale no longer applies.
+
 ## [1.11.1] - 2026-04-25
 ### Fixed
 - **SMB writes are atomic now: no more 0-byte stubs on the share** (`main._write_one_smb`). Previous behaviour opened the destination file (`records_YYYY-MM-DD.csv`, `master_YYYY-MM.csv`) directly in `mode='w'`, which truncates the file on the server at SMB CREATE *before* any data is sent. When a write hung past `network_write_timeout` (today's 2026-04-25 incident: server stopped responding after the first SMB Write Response), the daemon thread was abandoned and the share was left with a freshly-created 0-byte file — visible as `records_2026-04-25.csv  A  0  …` in `smbclient ls` output. 1C then read an empty CSV.
