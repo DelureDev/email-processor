@@ -10,15 +10,17 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 _clinics: list[dict] | None = None
+_clinic_id_map: dict[str, str] | None = None
 
 # Maximum cell length considered a header (not data) in extract_policy_comment
 _MAX_HEADER_LEN = 60
 
 
 def reload_clinics() -> None:
-    """Invalidate the clinic cache. Useful in tests that swap clinics.yaml."""
-    global _clinics
+    """Invalidate the clinic caches. Useful in tests that swap clinics.yaml."""
+    global _clinics, _clinic_id_map
     _clinics = None
+    _clinic_id_map = None
 
 
 def _load_clinics(config_path: str = 'clinics.yaml') -> list[dict]:
@@ -112,6 +114,45 @@ def detect_clinic(filepath: str, config_path: str = 'clinics.yaml', subject: str
 
     logger.warning(f"No clinic matched for {os.path.basename(filepath)} — setting '⚠️ Не определено'")
     return '⚠️ Не определено', False, ''
+
+
+def _load_clinic_id_map(config_path: str = 'clinics.yaml') -> dict[str, str]:
+    """Cached {clinic name → id} map for direct lookup by name.
+
+    Built from clinics.yaml. Used by recovery scripts that read records from
+    master.xlsx (which doesn't store ID Клиники) and need to repopulate the
+    column from the existing Клиника column.
+    """
+    global _clinic_id_map
+    if _clinic_id_map is not None:
+        return _clinic_id_map
+    if not os.path.exists(config_path):
+        _clinic_id_map = {}
+        return _clinic_id_map
+    with open(config_path, encoding='utf-8') as f:
+        data = yaml.safe_load(f) or {}
+    _clinic_id_map = {
+        entry.get('name', '').strip(): str(entry.get('id', '') or '')
+        for entry in data.get('clinics', [])
+        if entry.get('name', '').strip()
+    }
+    return _clinic_id_map
+
+
+def clinic_id_for_name(name: str, config_path: str = 'clinics.yaml') -> str:
+    """Resolve a clinic display name to its 1C id from clinics.yaml.
+
+    Returns '' for empty / sentinel ('⚠️ Не определено') / unknown names. Used
+    by recovery flows (resend_today, build_local_daily_csv) to backfill the
+    ID Клиники CSV column when records come from master.xlsx, which doesn't
+    persist that column.
+    """
+    if not name:
+        return ''
+    name = name.strip()
+    if not name or name == '⚠️ Не определено':
+        return ''
+    return _load_clinic_id_map(config_path).get(name, '')
 
 
 def extract_policy_comment(filepath: str) -> str:

@@ -3,7 +3,7 @@ import os
 import pytest
 import pandas as pd
 from openpyxl import Workbook
-from clinic_matcher import detect_clinic, extract_policy_comment, reload_clinics, _load_clinics
+from clinic_matcher import detect_clinic, extract_policy_comment, reload_clinics, _load_clinics, clinic_id_for_name
 
 
 @pytest.fixture(autouse=True)
@@ -100,6 +100,44 @@ class TestDetectClinic:
         clinic, _, clinic_id = detect_clinic(xlsx_path, config_path=clinics_path)
         assert clinic == 'Тест'
         assert clinic_id == '000000042'
+
+
+class TestClinicIdForName:
+    def test_resolves_known_name(self, tmp_path):
+        clinics_path = str(tmp_path / 'clinics.yaml')
+        _make_clinics_yaml(clinics_path, [
+            {'name': 'Гарибальди 36', 'id': '000000005', 'keywords': ['kw']},
+            {'name': 'Молодогвардейская', 'id': '000000004', 'keywords': ['kw2']},
+        ])
+        assert clinic_id_for_name('Гарибальди 36', config_path=clinics_path) == '000000005'
+        assert clinic_id_for_name('Молодогвардейская', config_path=clinics_path) == '000000004'
+
+    def test_unknown_name_returns_empty(self, tmp_path):
+        clinics_path = str(tmp_path / 'clinics.yaml')
+        _make_clinics_yaml(clinics_path, [
+            {'name': 'Гарибальди 36', 'id': '000000005', 'keywords': ['kw']},
+        ])
+        assert clinic_id_for_name('Неизвестная', config_path=clinics_path) == ''
+
+    def test_sentinel_returns_empty(self, tmp_path):
+        clinics_path = str(tmp_path / 'clinics.yaml')
+        _make_clinics_yaml(clinics_path, [
+            {'name': 'X', 'id': '99', 'keywords': ['kw']},
+        ])
+        assert clinic_id_for_name('⚠️ Не определено', config_path=clinics_path) == ''
+        assert clinic_id_for_name('', config_path=clinics_path) == ''
+        assert clinic_id_for_name('   ', config_path=clinics_path) == ''
+
+    def test_missing_id_returns_empty_string(self, tmp_path):
+        clinics_path = str(tmp_path / 'clinics.yaml')
+        _make_clinics_yaml(clinics_path, [
+            {'name': 'NoId', 'keywords': ['kw']},
+        ])
+        assert clinic_id_for_name('NoId', config_path=clinics_path) == ''
+
+    def test_missing_yaml_returns_empty(self, tmp_path):
+        assert clinic_id_for_name('Anything',
+                                  config_path=str(tmp_path / 'nonexistent.yaml')) == ''
 
 
 class TestExtractPolicyComment:

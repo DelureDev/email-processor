@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.11.3] - 2026-04-25
+### Fixed
+- **`ID Клиники` column was empty for every row in CSVs rebuilt by recovery scripts** (`resend_today.py`, `build_local_daily_csv.py`). Both scripts read records from `master.xlsx`, but `master.xlsx` deliberately doesn't persist `ID Клиники` — the column is CSV-only for 1C and is populated at write time by `process_file` calling `detect_clinic`. So records loaded via `pd.read_excel(...).to_dict('records')` have no `ID Клиники` key, and `csv.DictWriter(extrasaction='ignore')` writes blank for the missing column. Today's `records_2026-04-25.csv` (rebuilt by `resend_today.py` at 09:04) had all 85 rows with empty IDs — 1C-blocking.
+- New flow: both scripts now look up `ID Клиники` from `clinics.yaml` by the `Клиника` column value, via a new `clinic_matcher.clinic_id_for_name(name)` helper. Cached lookup map, returns `''` for unknown names / sentinel `⚠️ Не определено` / missing yaml.
+- `resend_today.py` also now calls `_remove_daily_if_exists(config, date_str)` before the export, so the daily CSV on the share is rebuilt from scratch instead of v1.11.1's `state=valid` path appending today's records on top of the wrong-IDs file from the failed earlier run. Without this, the recovered daily would be `existing-bad-rows + new-good-rows` — duplicated. Local recovery (`build_local_daily_csv.py`) writes to a fresh local path so no equivalent step is needed.
+
+### Added
+- `clinic_matcher.clinic_id_for_name(name) -> str` — public helper for reverse lookup of clinic id by display name. Cached via `_load_clinic_id_map()`; cache reset by existing `reload_clinics()`.
+- `main._remove_daily_if_exists(config, date_str)` — best-effort delete of `records_<date_str>.csv` from the configured export folder. Handles UNC (smbprotocol) and local paths. Used by `resend_today.py`; safe to call even when the file doesn't exist.
+
+### Tests
+- 5 new tests in `tests/test_clinic_matcher.py::TestClinicIdForName`: known name → id, unknown name → `''`, sentinel/empty input, clinic without id field, missing yaml.
+
 ## [1.11.2] - 2026-04-25
 ### Fixed
 - **Email report now reflects network export status** (`main.run_imap_mode`). Previously `send_report(config, stats)` ran *before* `_export_to_network(config, stats)`, so any SMB write timeout / failure landed in `stats['errors']` and `stats['network_status']` only after the morning email had already gone out. Today's incident: 08:00 cron emailed `errors=0` and `RUN_SUMMARY` then logged `errors=2 network=FAIL` — user found out only at 1C-load time when the daily CSV was 0 KB on the share.

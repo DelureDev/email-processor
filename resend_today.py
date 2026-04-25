@@ -19,9 +19,13 @@ from datetime import datetime
 
 import pandas as pd
 
-from main import load_config, setup_logging, make_stats, _export_to_network, _force_exit_if_stuck_threads
+from main import (
+    load_config, setup_logging, make_stats, _export_to_network,
+    _force_exit_if_stuck_threads, _remove_daily_if_exists,
+)
 from parsers.utils import norm_date_pad
 from notifier import send_report
+from clinic_matcher import clinic_id_for_name
 
 
 def main() -> int:
@@ -43,6 +47,12 @@ def main() -> int:
         print(f"No records with Дата обработки={today}. Nothing to send.")
         return 1
 
+    # master.xlsx doesn't persist ID Клиники (it's a CSV-only column for 1C),
+    # so re-populate from the Клиника column via clinics.yaml before any export.
+    # Without this, the daily CSV on the share has all-blank ID Клиники values.
+    for r in todays:
+        r['ID Клиники'] = clinic_id_for_name(r.get('Клиника', ''))
+
     stats = make_stats()
     stats['run_start'] = datetime.now()
     stats['new_records'] = todays
@@ -52,6 +62,12 @@ def main() -> int:
     for r in todays:
         company = r.get('Страховая компания') or 'Неизвестно'
         stats['by_company'][company] += 1
+
+    # Recovery semantics: blow away the daily CSV on the share so the export
+    # rebuilds it from scratch instead of appending today's records on top of
+    # the (likely wrong-IDs / partial) file from an earlier failed run.
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    _remove_daily_if_exists(config, date_str)
 
     send_report(config, stats)
     _export_to_network(config, stats)

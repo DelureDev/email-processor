@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.11.2"
+__version__ = "1.11.3"
 
 import os
 import re
@@ -372,6 +372,57 @@ def _is_unc_path(path: str) -> bool:
     """True if path looks like an SMB UNC path (\\\\server\\share or //server/share)."""
     p = path.strip()
     return p.startswith('\\\\') or p.startswith('//')
+
+
+def _remove_daily_if_exists(config: dict, date_str: str) -> None:
+    """Delete records_<date_str>.csv from the configured export folder if present.
+
+    Used by recovery scripts (resend_today) so the daily CSV gets rebuilt from
+    scratch instead of the v1.11.1+ path appending today's records on top of
+    a partial / wrong-IDs file from an earlier failed run. No-op if the export
+    folder is not configured. Best-effort: silent on missing file, warns on
+    real errors but never raises.
+    """
+    folder = config.get('output', {}).get('csv_export_folder', '').strip()
+    if not folder:
+        return
+    logger = logging.getLogger(__name__)
+
+    if _is_unc_path(folder):
+        try:
+            import smbclient
+            import smbprotocol.exceptions
+        except ImportError as e:
+            logger.warning(f"smbprotocol not installed — cannot remove daily CSV: {e}")
+            return
+        creds = config.get('output', {}).get('smb_credentials', {}) or {}
+        username = creds.get('username', '').strip()
+        password = creds.get('password', '').strip()
+        domain = creds.get('domain', '').strip()
+        if not username or not password:
+            logger.warning("SMB credentials missing — cannot remove daily CSV")
+            return
+        user_spec = f"{domain}\\{username}" if domain else username
+        base = folder.replace('/', '\\').rstrip('\\')
+        path = f"{base}\\records_{date_str}.csv"
+        try:
+            smbclient.remove(path, username=user_spec, password=password)
+            logger.info(f"Removed existing daily CSV from share: {path}")
+        except (smbprotocol.exceptions.SMBOSError, FileNotFoundError, OSError) as e:
+            # Either doesn't exist (fine, the common case) or some other SMB
+            # condition we can't recover from. Either way, the next export
+            # will see state='fresh' and rebuild — let it proceed.
+            logger.debug(f"No existing daily to remove at {path}: {e}")
+        return
+
+    path = os.path.join(folder, f'records_{date_str}.csv')
+    try:
+        os.remove(path)
+        logger.info(f"Removed existing daily CSV: {path}")
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.warning(f"Could not remove {path}: {e}")
 
 
 def _export_to_network(config: dict, stats: dict) -> None:

@@ -21,6 +21,7 @@ import pandas as pd
 from main import load_config
 from parsers.utils import norm_date_pad
 from writer import COLUMNS, _safe
+from clinic_matcher import clinic_id_for_name
 
 
 def main() -> int:
@@ -42,6 +43,11 @@ def main() -> int:
     if not todays:
         print(f"no records with Дата обработки={today}", file=sys.stderr)
         return 1
+
+    # master.xlsx doesn't persist ID Клиники — repopulate from clinics.yaml
+    # so the resulting CSV is 1C-ready (otherwise that column is all blank).
+    for r in todays:
+        r['ID Клиники'] = clinic_id_for_name(r.get('Клиника', ''))
 
     csv_columns = []
     for c in COLUMNS:
