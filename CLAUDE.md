@@ -63,7 +63,7 @@ Production VM: deploy via `git push` then `git pull` on VM.
 
 7. **`writer.py`** — appends records to `master.xlsx` (openpyxl). Creates styled file with header row if it doesn't exist; appends to existing. Auto-migrates old-layout files (inserts missing `Клиника`/`Комментарий в полис` columns). `load_existing_keys()` uses `pd.read_excel(dtype=str)` with `usecols=` to load the 5 dedup columns — raises `RuntimeError` on failure to prevent silent mass duplication. CSV backup (`master.csv`) written inside the file lock alongside xlsx.
 
-8. **`main.py`** — CLI entry point. `process_file(filepath, ..., sender=None, subject=None)` handles detection, parsing, clinic matching, and dedup for a single file. Deduplication key is `(ФИО.upper().replace('Ё','Е'), № полиса, Начало обслуживания, Конец обслуживания, Клиника)`. Execution order in IMAP mode: fetch → parse → write batch → move emails to processed → send email report → export to network share (with 10s timeout) → healthcheck ping. On last day of month, `_attach_monthly_if_last_day()` filters master.xlsx for current-month records and attaches as xlsx to the email report.
+8. **`main.py`** — CLI entry point. `process_file(filepath, ..., sender=None, subject=None)` handles detection, parsing, clinic matching, and dedup for a single file. Deduplication key is `(ФИО.upper().replace('Ё','Е'), № полиса, Начало обслуживания, Конец обслуживания, Клиника)`. Execution order in IMAP mode: fetch → parse → write batch → move emails to processed → monthly-attach (last day of month) → export to network share (`network_write_timeout`, default 30s × 2 files) → send email report → healthcheck ping. The export-before-email order (v1.11.2+) means the email reflects `network_status` truthfully — silent SMB failures used to land in stats AFTER the email had already gone out. On last day of month, `_attach_monthly_if_last_day()` filters master.xlsx for current-month records and attaches as xlsx to the email report.
 
 ## Adding a new insurer
 
@@ -79,10 +79,9 @@ Production VM: deploy via `git push` then `git pull` on VM.
 
 Key config options added since v1.0:
 - `imap.processed_folder` — folder name to move processed emails into (e.g. `"Обработанные"`)
-- `output.csv_export_folder` — network share path for daily + monthly CSV export. Accepts either a **UNC path** (`\\10.10.10.21\dms_reports` or `//server/share`) or a **local path** (`/mnt/storage`). UNC triggers userspace SMB via `smbprotocol` (v1.11.0+) — no kernel mount, no D-state hangs. Local path triggers the legacy mount-based writer. Dispatch is automatic based on the string shape. UNC is recommended.
-- `output.smb_credentials` — required when `csv_export_folder` is a UNC path. Block with `username` / `password` / `domain` keys; `${ENV}` placeholders are expanded at load time. Unused in local-path mode (that mode authenticates via `/etc/cifs-creds` at mount time).
-- `output.network_timeout` — seconds to wait for network share accessibility probe (default: 10). Only used in local-path mode.
-- `output.network_write_timeout` — seconds to wait for each CSV write before giving up (default: 30). Applies to both modes as a daemon-thread safety net. See v1.10.15 / v1.11.0.
+- `output.csv_export_folder` — network share path for daily + monthly CSV export. Use a **UNC path** (`\\10.10.10.21\dms_reports` or `//server/share`) — `_export_via_smb` writes via userspace `smbprotocol`, no kernel mount. The legacy local-path branch (`/mnt/storage`) still exists in code but is unused in production (kernel CIFS was decommissioned 2026-04-24).
+- `output.smb_credentials` — required for UNC mode. Block with `username` / `password` / `domain` keys; `${ENV}` placeholders are expanded at load time.
+- `output.network_write_timeout` — seconds to wait for each CSV write before giving up (default: 30). Daemon-thread safety net inside `_write_one_smb`; abandoned writes are cleaned up by `_force_exit_if_stuck_threads` at process end.
 - `imap.zetta_password_cache` — path to the Zetta monthly-password disk cache (default: `./zetta_password.json`). Gitignored, mode 0600, auto-expires when `valid_to < today`. See CHANGELOG v1.10.8.
 - `clinics.yaml` — separate file, not inside `config.yaml`
 

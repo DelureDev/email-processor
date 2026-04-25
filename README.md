@@ -11,7 +11,7 @@
 - **Комментарий в полис** — извлекает описание программы ДМС из файла (для нужных клиник, флаг `extract_comment: true` в `clinics.yaml`)
 - **Дедупликация** — по ФИО + полис + даты обслуживания + клиника; нормализация `ё` → `е`
 - **Email-отчёт** — итоги обработки + вложение `records_YYYY-MM-DD.xlsx` с новыми записями; в последний день месяца прикрепляется xlsx со всеми записями текущего месяца
-- **Экспорт на сетевой диск** — ежедневный CSV + ежемесячный `master_YYYY-MM.csv` автоматически копируются в сетевую папку (SMB, userspace через `smbprotocol` или legacy через CIFS-mount) для загрузки в 1С. Таймауты не блокируют email-отчёт при недоступности сервера
+- **Экспорт на сетевой диск** — ежедневный CSV + ежемесячный `master_YYYY-MM.csv` автоматически записываются в сетевую папку напрямую через `smbprotocol` (без kernel mount) для загрузки в 1С. Таймауты не блокируют email-отчёт при недоступности сервера; запись атомарная (через `<dest>.tmp` + `replace`), так что зависший SMB не оставляет 0-байтовых файлов
 - **Архивирование писем** — обработанные письма переносятся в папку "Обработанные" (настраивается в конфиге)
 - **Резервное копирование** — `master.xlsx.bak` + `master.csv` создаются после каждой записи
 - **Карантин** — файлы с ошибками парсинга сохраняются в `./quarantine/`
@@ -125,11 +125,7 @@ email-processor/
 
 ## Экспорт на сетевой диск (SMB)
 
-Два способа на выбор — в `config.yaml` ставите нужный путь, код сам переключается.
-
-### Вариант A: Userspace SMB (рекомендуется, v1.11.0+)
-
-Запись идёт напрямую через Python-библиотеку `smbprotocol` — без монтирования, без ядерных таймаутов, без залипших хэндлов на сервере.
+Запись идёт напрямую через Python-библиотеку `smbprotocol` — без монтирования, без ядерных таймаутов, без залипших хэндлов на сервере. Каждая запись — atomic write-then-rename: байты пишутся в `<dest>.<uuid>.tmp`, затем `smbclient.replace` атомарно заменяет `dest`. Зависшая SMB-запись не оставляет 0-байтового файла.
 
 ```yaml
 output:
@@ -147,33 +143,6 @@ export SMB_PASSWORD="..."
 ```
 
 `pip install -r requirements.txt` поставит `smbprotocol`. Больше ничего не нужно — ни `cifs-utils`, ни `/etc/fstab`, ни `mount`.
-
-### Вариант B: Legacy CIFS mount (для обратной совместимости)
-
-Работает, но подвержен зависаниям при проблемах на стороне SMB-сервера (D-state процессы, см. CHANGELOG v1.9.3–v1.10.17).
-
-```bash
-sudo apt install cifs-utils
-sudo mkdir -p /mnt/storage
-```
-
-В `/etc/fstab`:
-```
-//SERVER/SHARE /mnt/storage cifs credentials=/etc/cifs-creds,iocharset=utf8,uid=adminos,file_mode=0755,dir_mode=0755,vers=2.1,soft,retrans=2,actimeo=5,_netdev,nofail 0 0
-```
-
-`/etc/cifs-creds` (0600):
-```
-username=user.name
-password=...
-domain=yourdomain.local
-```
-
-В `config.yaml`:
-```yaml
-output:
-  csv_export_folder: "/mnt/storage"
-```
 
 После каждого запуска в сетевой папке появляются `records_YYYY-MM-DD.csv` и `master_YYYY-MM.csv`.
 

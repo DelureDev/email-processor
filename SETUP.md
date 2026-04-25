@@ -14,8 +14,6 @@ Deploy the email-processor pipeline on a clean Linux VM.
 ```bash
 sudo apt update
 sudo apt install -y python3 python3-pip libreoffice-calc
-# Only for Option B (legacy CIFS mount) in section 5:
-sudo apt install -y cifs-utils
 ```
 
 ## 2. Clone and install
@@ -63,13 +61,7 @@ These are also created automatically on first run, but pre-creating them avoids 
 
 ## 5. Network share for 1C CSV export (optional)
 
-Pick **one** method. The code dispatches automatically based on the shape of `output.csv_export_folder`:
-- UNC (`\\server\share`) → userspace SMB via `smbprotocol`
-- Local path (`/mnt/storage`) → legacy kernel CIFS mount
-
-### Option A: Userspace SMB (recommended, v1.11.0+)
-
-No kernel mount, no `cifs-utils`, no `/etc/fstab`. Each write opens a fresh short-lived SMB session — eliminates D-state hangs and stuck-handle issues we hit with the kernel client.
+Userspace SMB via `smbprotocol`. No kernel mount, no `cifs-utils`, no `/etc/fstab`. Each write opens a fresh short-lived SMB session — no D-state hangs, no stuck-handle issues.
 
 Add credentials to `.env`:
 ```bash
@@ -95,40 +87,7 @@ SMB_PASSWORD=...
 */30 * * * * cd /home/adminos/email-processor && set -a; source .env; set +a; python3 main.py 2>&1 | logger -t email-processor
 ```
 
-### Option B: Legacy kernel CIFS mount (fallback)
-
-Still supported, retained for hosts that can't run `smbprotocol` or need to stay on the old setup. Subject to mount-layer hangs documented in CHANGELOG v1.9.3–v1.10.17.
-
-`/etc/cifs-creds` (mode 0600, root:root):
-```
-username=k.sikachev
-password=...
-domain=fantasy.local
-```
-
-`/etc/fstab`:
-```
-//10.10.10.21/dms_reports /mnt/storage cifs credentials=/etc/cifs-creds,iocharset=utf8,uid=adminos,file_mode=0755,dir_mode=0755,vers=2.1,soft,retrans=2,actimeo=5,_netdev,nofail 0 0
-```
-
-Notes:
-- Use `vers=2.1` or `vers=3.0` depending on your Windows server's SMB policy. `vers=2.0` may be rejected by modern Windows security policies (we hit this on 2026-04-23).
-- `soft,retrans=2` is essential — without it, CIFS hangs forever on any server stall, producing unkillable D-state Python processes.
-- Do **not** add `timeo=N` — that's an NFS option; CIFS rejects it with `cifs: Unknown parameter 'timeo'`.
-- `_netdev` ensures mount waits for network; `nofail` lets boot continue if the server is unreachable.
-
-```bash
-sudo mkdir /mnt/storage
-sudo mount -a
-ls /mnt/storage  # verify
-```
-
-In `config.yaml`:
-```yaml
-output:
-  master_file: "./output/master.xlsx"
-  csv_export_folder: "/mnt/storage"
-```
+(A legacy local-path branch in `_export_to_network` exists for backward compatibility but is unused in production. The kernel CIFS mount setup was retired 2026-04-24.)
 
 ## 6. First-run smoke test
 

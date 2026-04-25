@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """One-off: build today's records_YYYY-MM-DD.csv LOCALLY from master.xlsx.
 
-For when the CIFS share is fully dead but you need a correct daily CSV
-for 1C import. Writes to the current directory with BOM + 12-column
-header. When CIFS recovers, copy the result up manually:
+For when the SMB share is unreachable but you need a correct daily CSV
+to hand to 1C. Writes to the current directory with BOM + 12-column
+header. No network ops at all — master.xlsx is local, output is local.
 
     python3 build_local_daily_csv.py
-    # → writes records_2026-04-24.csv to cwd
-    cp records_2026-04-24.csv /mnt/storage/
+    # → writes records_YYYY-MM-DD.csv to cwd
 
-No network ops at all — master.xlsx is local, output is local.
+When the share recovers, run `python3 resend_today.py` to push the
+file up via smbprotocol (it deletes the existing daily on the share
+first, so a partial file is replaced cleanly).
 """
 import csv
 import os
@@ -66,7 +67,7 @@ def main() -> int:
             w.writerow({k: _safe(v) for k, v in record.items()})
 
     print(f"Wrote {len(todays)} records to ./{out}")
-    print(f"When CIFS is alive: cp {out} /mnt/storage/")
+    print("When the share is alive: python3 resend_today.py (pushes via smbprotocol)")
     return 0
 
 
