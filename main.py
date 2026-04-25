@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.11.3"
+__version__ = "1.11.4"
 
 import os
 import re
@@ -661,13 +661,17 @@ def _export_via_smb(config: dict, stats: dict, unc_folder: str) -> None:
             return 'fresh'
         if info.st_size < 3:
             return 'corrupt'  # too small to hold a BOM + any content
-        try:
-            with smbclient.open_file(path, mode='rb',
-                                     username=user_spec, password=password) as f:
-                head = f.read(3)
-            return 'valid' if head == b'\xef\xbb\xbf' else 'corrupt'
-        except Exception:
-            return 'fresh'
+        # Let read failures propagate. Previously this `except: return 'fresh'`
+        # was a data-loss path: stat had already proved the file exists and is
+        # non-empty, so a transient SMB read stall would mis-classify it as
+        # 'fresh' and the next branch in _write_one_smb would overwrite the
+        # valid file with only today's rows. Letting the exception bubble up
+        # to _work's outer try/except records network_status='FAIL' and leaves
+        # dest untouched — strictly safer than clobbering it.
+        with smbclient.open_file(path, mode='rb',
+                                 username=user_spec, password=password) as f:
+            head = f.read(3)
+        return 'valid' if head == b'\xef\xbb\xbf' else 'corrupt'
 
     def _write_one_smb(dest: str, kind: str) -> None:
         import io
@@ -678,31 +682,36 @@ def _export_via_smb(config: dict, stats: dict, unc_folder: str) -> None:
             try:
                 state = _remote_file_state(dest)
 
-                # Build the full file content in memory: BOM + (header or existing
-                # rows) + this run's new rows. Building in memory means one binary
-                # SMB write instead of many row-sized writes — fewer chances for
-                # the server to hang mid-stream, and we never have to flush a
-                # text-mode buffer over a flaky link.
-                buf = io.StringIO(newline='')
-                buf.write('﻿')
+                # Build the full file content in memory: existing bytes (or a
+                # fresh BOM + header) followed by this run's new rows as
+                # UTF-8 bytes. Building in memory means one binary SMB write
+                # instead of many row-sized writes — fewer chances for the
+                # server to hang mid-stream, and we never flush a text-mode
+                # buffer over a flaky link.
+                new_rows = io.StringIO(newline='')
                 row_writer = csv.DictWriter(
-                    buf, fieldnames=csv_columns, extrasaction='ignore',
+                    new_rows, fieldnames=csv_columns, extrasaction='ignore',
                     delimiter=';', lineterminator='\r\n',
                 )
                 if state == 'valid':
+                    # Existing remote file already has BOM + header + previous
+                    # rows. Read as bytes (no encoding round-trip) and concat
+                    # the new rows after.
                     with smbclient.open_file(
-                        dest, mode='r', encoding='utf-8-sig', newline='',
+                        dest, mode='rb',
                         username=user_spec, password=password,
                     ) as f:
-                        buf.write(f.read())
+                        existing_bytes = f.read()
                 else:
                     if state == 'corrupt':
                         logger.warning(f"SMB {kind}: replacing headerless/BOM-less {dest}")
+                    new_rows.write('﻿')
                     row_writer.writeheader()
+                    existing_bytes = b''
                 for record in records:
                     row_writer.writerow({k: _safe(v) for k, v in record.items()})
 
-                payload = buf.getvalue().encode('utf-8')
+                payload = existing_bytes + new_rows.getvalue().encode('utf-8')
 
                 # Atomic publish: write to a uuid-suffixed tmp path that has no
                 # prior handle on the server, then SMB-rename over dest. We never

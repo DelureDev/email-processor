@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.11.4] - 2026-04-25
+### Fixed
+- **`_remote_file_state` no longer falls through to `'fresh'` when an existing file's BOM probe fails** (`main.py`). Previously, the second `try/except Exception: return 'fresh'` was a silent data-loss path: `stat()` had already proved the file exists and is non-empty, so a transient SMB read stall during the 3-byte BOM read would mis-classify the file as `'fresh'`, and the next branch in `_write_one_smb` would rebuild it with only today's rows — overwriting the day's earlier records. Given that the production server has a known intermittent stall after the first SMB Write Response (today's 08:00 incident), this was a real risk on every cron run that re-touched a populated daily file. Fix: removed the inner exception handler. Read failures now propagate to `_work()`'s outer `except`, which records `network_status='FAIL'` + `stats['errors'].append(...)`. `dest` is left untouched.
+- **`_write_one_smb` reads the existing file as bytes, not text** (`main.py`, `state == 'valid'` branch). Previously `mode='r' encoding='utf-8-sig' newline=''` decoded existing bytes into a string, dropped them into a `StringIO`, and re-encoded to UTF-8 in the final `payload`. With the new code, the existing remote file is read once via `mode='rb'` and concatenated as bytes with the new-rows buffer encoded to UTF-8. One encoding hop instead of two, and one fewer failure surface for cells with edge-case content (embedded newlines, non-canonical line endings). No behavior change for current production data — `_safe()` already strips `\r`/`\n` from cell values — but the change closes a class of latent corruption modes.
+
+### Identified by code review
+- The two changes above were flagged in a multi-agent code review of v1.11.1–v1.11.3 (post-incident, pre-tomorrow's 08:00 cron). Other findings (orphan-tmp sweep, monthly-write timeout, notifier subject-line `network=FAIL`, dead local-path branch removal, full mock-smbclient unit tests for `_export_via_smb`) were deferred to a planned follow-up patch — not blocking tomorrow's run.
+
 ## [1.11.3] - 2026-04-25
 ### Fixed
 - **`ID Клиники` column was empty for every row in CSVs rebuilt by recovery scripts** (`resend_today.py`, `build_local_daily_csv.py`). Both scripts read records from `master.xlsx`, but `master.xlsx` deliberately doesn't persist `ID Клиники` — the column is CSV-only for 1C and is populated at write time by `process_file` calling `detect_clinic`. So records loaded via `pd.read_excel(...).to_dict('records')` have no `ID Клиники` key, and `csv.DictWriter(extrasaction='ignore')` writes blank for the missing column. Today's `records_2026-04-25.csv` (rebuilt by `resend_today.py` at 09:04) had all 85 rows with empty IDs — 1C-blocking.
