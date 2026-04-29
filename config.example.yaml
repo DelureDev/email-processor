@@ -81,6 +81,12 @@ output:
   # Seconds to wait for each CSV write (daily + monthly) before giving up.
   # Applies to both UNC and local modes.
   network_write_timeout: 30
+  # Whether to write master_YYYY-MM.csv to the share alongside the daily file.
+  # The monthly file is archival/test only — 1C reads only records_YYYY-MM-DD.csv.
+  # Set to false on production VMs that don't need the monthly archive (avoids
+  # the larger merge-and-rewrite that's most likely to hit network_write_timeout
+  # near month-end). Default: true (backwards-compatible).
+  export_monthly_csv: true
   # Credentials used only when csv_export_folder is a UNC path. Unused for
   # local-path mode (that mode authenticates via /etc/cifs-creds at mount
   # time). ${ENV_VAR} placeholders are expanded at load time; keep password

@@ -82,6 +82,7 @@ Key config options added since v1.0:
 - `output.csv_export_folder` — network share path for daily + monthly CSV export. Use a **UNC path** (`\\10.10.10.21\dms_reports` or `//server/share`) — `_export_via_smb` writes via userspace `smbprotocol`, no kernel mount. The legacy local-path branch (`/mnt/storage`) still exists in code but is unused in production (kernel CIFS was decommissioned 2026-04-24).
 - `output.smb_credentials` — required for UNC mode. Block with `username` / `password` / `domain` keys; `${ENV}` placeholders are expanded at load time.
 - `output.network_write_timeout` — seconds to wait for each CSV write before giving up (default: 30). Daemon-thread safety net inside `_write_one_smb`; abandoned writes are cleaned up by `_force_exit_if_stuck_threads` at process end.
+- `output.export_monthly_csv` — write `master_YYYY-MM.csv` to the share alongside the daily file (default: `true`). Set `false` to skip the monthly write. Daily `records_YYYY-MM-DD.csv` (consumed by 1C) is unaffected. Use when the monthly merge-and-rewrite is hitting `network_write_timeout` and the monthly archive isn't actively needed. See CHANGELOG v1.11.5.
 - `imap.zetta_password_cache` — path to the Zetta monthly-password disk cache (default: `./zetta_password.json`). Gitignored, mode 0600, auto-expires when `valid_to < today`. See CHANGELOG v1.10.8.
 - `clinics.yaml` — separate file, not inside `config.yaml`
 

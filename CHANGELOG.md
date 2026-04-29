@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.11.5] - 2026-04-29
+### Added
+- **`output.export_monthly_csv` config flag** (`main._export_via_smb`). Set to `false` to skip the `master_YYYY-MM.csv` write to the network share. Daily `records_YYYY-MM-DD.csv` (the file 1C actually reads) is unaffected. Default: `true` — existing configs without the key keep current behavior. Motivation: today's 08:00 cron, the daily write took 41ms and succeeded, but the monthly write hung after the first SMB Write Response and timed out at 30s. The monthly file is archival/test only — duplicates and gaps in it don't impact 1C — so the cleanest mitigation is to stop writing it on the production VM until we have a reason to keep it. Re-enabling mid-month will append today's records on top of whatever `master_YYYY-MM.csv` is already on the share, so any data added during the disabled window won't be in it until the file is rebuilt manually.
+
 ## [1.11.4] - 2026-04-25
 ### Fixed
 - **`_remote_file_state` no longer falls through to `'fresh'` when an existing file's BOM probe fails** (`main.py`). Previously, the second `try/except Exception: return 'fresh'` was a silent data-loss path: `stat()` had already proved the file exists and is non-empty, so a transient SMB read stall during the 3-byte BOM read would mis-classify the file as `'fresh'`, and the next branch in `_write_one_smb` would rebuild it with only today's rows — overwriting the day's earlier records. Given that the production server has a known intermittent stall after the first SMB Write Response (today's 08:00 incident), this was a real risk on every cron run that re-touched a populated daily file. Fix: removed the inner exception handler. Read failures now propagate to `_work()`'s outer `except`, which records `network_status='FAIL'` + `stats['errors'].append(...)`. `dest` is left untouched.

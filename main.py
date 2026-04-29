@@ -9,7 +9,7 @@ Usage:
     python main.py --test ./files      # Test mode: parse + show results, no write
     python main.py --dry-run           # IMAP mode but don't write to master
 """
-__version__ = "1.11.4"
+__version__ = "1.11.5"
 
 import os
 import re
@@ -761,9 +761,14 @@ def _export_via_smb(config: dict, stats: dict, unc_folder: str) -> None:
     daily_dest = f"{base}\\records_{date_str}.csv"
     _write_one_smb(daily_dest, 'daily')
 
-    month_str = now.strftime('%Y-%m')
-    monthly_dest = f"{base}\\master_{month_str}.csv"
-    _write_one_smb(monthly_dest, 'monthly')
+    # Monthly master CSV is archival/test only — 1C reads the daily file.
+    # Toggle via output.export_monthly_csv (default: True for backwards compat).
+    if config.get('output', {}).get('export_monthly_csv', True):
+        month_str = now.strftime('%Y-%m')
+        monthly_dest = f"{base}\\master_{month_str}.csv"
+        _write_one_smb(monthly_dest, 'monthly')
+    else:
+        logger.info("Monthly CSV export disabled (output.export_monthly_csv=false) — skipping master_YYYY-MM.csv")
 
     if stats.get('network_status') != 'FAIL':
         stats['network_status'] = 'OK'
